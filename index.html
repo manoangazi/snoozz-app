@@ -1047,7 +1047,6 @@ function preloadMetaFromCache() {
     t._metaCached = true; // signals fetchTrackMeta to skip S3 if no art pending
   }
 }
-}
 
 async function parseID3v2(buf) {
   const dv = new DataView(buf);
