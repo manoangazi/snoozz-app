@@ -12,7 +12,11 @@
 <title>Snoozz — Sleep Music</title>
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20512%20512%22%3E%3Crect%20width%3D%22512%22%20height%3D%22512%22%20rx%3D%22112%22%20fill%3D%22%230d0e12%22%2F%3E%3Ccircle%20cx%3D%22232%22%20cy%3D%22256%22%20r%3D%22150%22%20fill%3D%22%237da6d9%22%2F%3E%3Ccircle%20cx%3D%22300%22%20cy%3D%22216%22%20r%3D%22140%22%20fill%3D%22%230d0e12%22%2F%3E%3C%2Fsvg%3E">
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+/* Re-enable text entry/selection only where it's needed (login fields).
+   App-wide selection is OFF so iOS doesn't hijack taps as selection gestures —
+   that was eating clicks on the timer chips, scrim, and Start button on iOS. */
+input, textarea { -webkit-user-select: text; user-select: text; }
 
 :root {
   --bg: #0d0e12;
@@ -231,7 +235,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 #scrim.active { display: block; }
 #sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 51; transform: translateY(100%); transition: transform .3s ease; background: var(--bg-raised); border-radius: var(--r-sheet) var(--r-sheet) 0 0; border-top: 1.5px solid var(--ink-faint); box-shadow: 0 -20px 50px rgba(0,0,0,0.5); padding: 14px 20px calc(26px + var(--safe-bottom)); touch-action: pan-y; }
 #sheet.active { transform: translateY(0); }
-.sheet-grab { width: 38px; height: 5px; border-radius: 3px; background: var(--ink-dim); margin: 0 auto 16px; }
+.sheet-grab { width: 38px; height: 5px; border-radius: 3px; background: var(--ink-dim); margin: 0 auto 16px; cursor: pointer; box-sizing: content-box; padding: 10px 30px; background-clip: content-box; }
 .sheet-title { font-size: 21px; font-weight: 600; margin-bottom: 3px; }
 .sheet-sub { font: 11px var(--mono); color: var(--ink-dim); margin-bottom: 16px; }
 .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
@@ -379,7 +383,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
   <!-- SHEET -->
   <div id="scrim" data-action="close-sheet"></div>
   <div id="sheet">
-    <div class="sheet-grab"></div>
+    <div class="sheet-grab" id="sheet-grab"></div>
     <div class="sheet-title">Sleep timer</div>
     <div class="sheet-sub">Mix loops, then fades out &amp; stops</div>
     <div class="chips" id="chips"></div>
@@ -1715,6 +1719,20 @@ function bindEvents() {
   $('now').addEventListener('touchend', (e) => {
     if (e.changedTouches[0].clientY - npY > 90) collapseNow();
   }, { passive: true });
+
+  // Sleep-timer sheet: guaranteed minimise paths for iOS.
+  // (Tapping the scrim already closes via delegation; these are belt-and-braces.)
+  // 1) swipe down anywhere on the sheet, 2) tap the grab handle.
+  let shY = null;
+  const sheet = $('sheet');
+  sheet.addEventListener('touchstart', (e) => { shY = e.touches[0].clientY; }, { passive: true });
+  sheet.addEventListener('touchend', (e) => {
+    if (shY != null && e.changedTouches[0].clientY - shY > 60) closeSheet();
+    shY = null;
+  }, { passive: true });
+  $('sheet-grab').addEventListener('click', closeSheet);
+  // Direct scrim close — iOS sometimes drops body-delegated clicks on bare divs.
+  $('scrim').addEventListener('click', closeSheet);
 
   // Connectivity
   window.addEventListener('online', () => { S.connectivity = 'online'; toast('Back online'); renderGrid(); });
