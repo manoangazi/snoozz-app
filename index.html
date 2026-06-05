@@ -99,7 +99,9 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 #home { display: none; flex-direction: column; height: 100%; min-height: 0; }
 #home.active { display: flex; }
 
-.topbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 18px 12px; flex: 0 0 auto; }
+/* z-index + solid bg + own layer keep the bar painted during iOS momentum scroll
+   (it sits outside the scroller so it's already locked by layout — this stops the flicker). */
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 18px 12px; flex: 0 0 auto; position: relative; z-index: 3; background: var(--bg); transform: translateZ(0); }
 .topbar-brand { display: flex; align-items: center; gap: 9px; }
 .topbar-brand .moon { width: 18px; height: 18px; }
 .topbar-brand .moon::after { right: -3px; top: -2px; width: 15px; height: 15px; }
@@ -116,7 +118,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 #refresh-art-btn.spinning { color: var(--accent); border-color: var(--accent); animation: spin 0.9s linear infinite; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-#topbar-select { display: none; align-items: center; justify-content: space-between; padding: 8px 18px 12px; flex: 0 0 auto; }
+#topbar-select { display: none; align-items: center; justify-content: space-between; padding: 8px 18px 12px; flex: 0 0 auto; position: relative; z-index: 3; background: var(--bg); transform: translateZ(0); }
 #topbar-select.active { display: flex; }
 #topbar-select .center { font-size: 17px; font-weight: 600; }
 #topbar-select .side { font: 15px var(--font); color: var(--ink-dim); padding: 8px; min-width: 56px; }
@@ -445,9 +447,52 @@ const S = {
 };
 
 const $ = id => document.getElementById(id);
-const audio = new Audio();
-audio.preload = 'auto';
+let audio;                 // current playback element; rebuilt after a Web Audio fade taints it
 let audioRetry = 0;
+// Web Audio is used ONLY for the sleep-timer fade — iOS ignores audio.volume, so a
+// GainNode is the only way to ramp output there. Attaching a MediaElementSource taints
+// the element (iOS then resamples it), which is fine for the end-of-session fade; we
+// rebuild a pristine element next session to restore true hi-res direct playback.
+let audioCtx = null, srcNode = null, gainNode = null, waTainted = false;
+
+function attachAudioListeners(el) {
+  el.addEventListener('ended', handleEnded);
+  el.addEventListener('play', () => { S.isPlaying = true; updatePlayIcons(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
+  el.addEventListener('pause', () => { if (!S.timer.isRunning || el.currentTime) updatePlayIcons(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
+  el.addEventListener('timeupdate', () => { if (!S.scrubDragging) updateScrubber(); });
+  el.addEventListener('playing', () => { audioRetry = 0; });
+  el.addEventListener('error', async () => {
+    const t = S.queue[S.queueIdx];
+    if (!t || t.cached || audioRetry >= CFG.MAX_RETRIES) return;
+    audioRetry++;
+    delete S.urlCache[t.key];
+    try {
+      const url = await S.s3.getSignedUrl(t.key);
+      el.src = url; el.load();
+      if (S.isPlaying) el.play().catch(() => {});
+    } catch {}
+  });
+}
+function newAudioElement() {
+  const el = new Audio();
+  el.preload = 'auto';
+  attachAudioListeners(el);
+  return el;
+}
+audio = newAudioElement();
+
+// If a prior sleep-fade routed playback through Web Audio (tainting the element and
+// forcing iOS resampling), rebuild a fresh element so the next session plays hi-res direct.
+function ensureFreshAudio() {
+  if (!waTainted) return;
+  try { audio.pause(); } catch {}
+  try { srcNode && srcNode.disconnect(); } catch {}
+  try { gainNode && gainNode.disconnect(); } catch {}
+  try { audioCtx && audioCtx.close(); } catch {}
+  audioCtx = srcNode = gainNode = null; waTainted = false;
+  audio = newAudioElement();
+  audio.volume = S.volume;
+}
 
 // ══════════════════════════════════════════════════════════════
 //  Utilities
@@ -774,6 +819,7 @@ async function loadAndPlay(idx, autoplay) {
 
 async function startQueue(trackObjs, { loop = true, timerMinutes = null } = {}) {
   if (!trackObjs.length) return;
+  ensureFreshAudio(); // restore a pristine (hi-res, untainted) element if a prior fade used Web Audio
   S.queue = (S.timerPrefs.shuffle && timerMinutes && trackObjs.length > 1) ? shuffle(trackObjs) : trackObjs.slice();
   S.loopMode = loop;
   audio.volume = S.volume;
@@ -825,23 +871,7 @@ function prevTrack() {
   loadAndPlay(p, true);
 }
 
-// audio events
-audio.addEventListener('ended', handleEnded);
-audio.addEventListener('play', () => { S.isPlaying = true; updatePlayIcons(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
-audio.addEventListener('pause', () => { if (!S.timer.isRunning || audio.currentTime) updatePlayIcons(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
-audio.addEventListener('timeupdate', () => { if (!S.scrubDragging) updateScrubber(); });
-audio.addEventListener('playing', () => { audioRetry = 0; });
-audio.addEventListener('error', async () => {
-  const t = S.queue[S.queueIdx];
-  if (!t || t.cached || audioRetry >= CFG.MAX_RETRIES) return;
-  audioRetry++;
-  delete S.urlCache[t.key];
-  try {
-    const url = await S.s3.getSignedUrl(t.key);
-    audio.src = url; audio.load();
-    if (S.isPlaying) audio.play().catch(() => {});
-  } catch {}
-});
+// (audio events are attached per-element in attachAudioListeners, above)
 
 // ══════════════════════════════════════════════════════════════
 //  Sleep timer
@@ -858,6 +888,7 @@ function startTimer(minutes) {
 function clearTimer() {
   if (S.tickId) { clearInterval(S.tickId); S.tickId = null; }
   if (S.fadeId) { clearInterval(S.fadeId); S.fadeId = null; }
+  cancelFade();
   S.timer.isRunning = false; S.timer.endTime = null; S.timer.minutes = null;
   $('np-ring').style.display = 'none';
 }
@@ -865,19 +896,59 @@ function tickTimer() {
   if (!S.timer.endTime) return;
   const rem = S.timer.endTime - Date.now();
   updateTimerUI(rem);
-  if (S.timer.fadeWindowMs && rem <= S.timer.fadeWindowMs && rem > 0 && !S.fadeId) startFade(rem);
+  if (S.timer.fadeWindowMs && rem <= S.timer.fadeWindowMs && rem > 0 && !S._fadeStarted) startFade(rem);
   if (rem <= 0) finishTimer();
 }
+// Begin the fade-out. Prefer a Web Audio GainNode ramp (works on iOS, where
+// audio.volume is ignored); fall back to a stepped audio.volume fade if Web Audio
+// is unavailable. The GainNode path taints the element for hi-res — fine at end of session.
 function startFade(remMs) {
-  const startVol = S.volume, t0 = Date.now();
-  S.fadeId = setInterval(() => {
-    const frac = Math.min(1, (Date.now() - t0) / remMs);
-    audio.volume = Math.max(0, startVol * (1 - frac));
-    if (frac >= 1) { clearInterval(S.fadeId); S.fadeId = null; }
-  }, CFG.FADE_STEP_MS);
+  S._fadeStarted = true;
+  const secs = Math.max(0.05, remMs / 1000);
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) throw new Error('no WebAudio');
+    if (!audioCtx) {
+      audioCtx = new Ctx();
+      srcNode = audioCtx.createMediaElementSource(audio);
+      gainNode = audioCtx.createGain();
+      srcNode.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      waTainted = true;
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const now = audioCtx.currentTime;
+    const startVol = Math.max(0.0001, S.volume);
+    gainNode.gain.cancelScheduledValues(now);
+    gainNode.gain.setValueAtTime(startVol, now);
+    gainNode.gain.linearRampToValueAtTime(0.0001, now + secs);
+  } catch (e) {
+    // Fallback: stepped audio.volume fade (effective on desktop; silent no-op on iOS)
+    console.warn('WebAudio fade unavailable, using volume fade', e.message);
+    const startVol = S.volume, t0 = Date.now();
+    S.fadeId = setInterval(() => {
+      const frac = Math.min(1, (Date.now() - t0) / remMs);
+      audio.volume = Math.max(0, startVol * (1 - frac));
+      if (frac >= 1) { clearInterval(S.fadeId); S.fadeId = null; }
+    }, CFG.FADE_STEP_MS);
+  }
+}
+// Stop any in-progress fade and restore full level (both fade paths).
+function cancelFade() {
+  S._fadeStarted = false;
+  if (S.fadeId) { clearInterval(S.fadeId); S.fadeId = null; }
+  audio.volume = S.volume;
+  if (gainNode && audioCtx) {
+    try {
+      const now = audioCtx.currentTime;
+      gainNode.gain.cancelScheduledValues(now);
+      gainNode.gain.setValueAtTime(S.volume, now);
+    } catch {}
+  }
 }
 function finishTimer() {
   audio.pause();
+  S._fadeStarted = false;
   audio.volume = S.volume;
   S.isPlaying = false;
   clearTimer();
@@ -887,7 +958,7 @@ function finishTimer() {
 }
 function extendTimer() {
   if (!S.timer.isRunning) { toast('No timer running'); return; }
-  if (S.fadeId) { clearInterval(S.fadeId); S.fadeId = null; audio.volume = S.volume; }
+  cancelFade();
   S.timer.endTime += 5 * 60000;
   toast('+5 minutes');
   tickTimer();
@@ -1706,10 +1777,17 @@ function bindEvents() {
     $('time-cur').textContent = formatTime(p * dur);
   }, { onStart: () => { S.scrubDragging = true; }, onEnd: (p) => { S.scrubDragging = false; if (audio.duration) audio.currentTime = p * audio.duration; } });
 
-  // Volume drag
+  // Volume drag.
+  // Desktop: audio.volume controls output directly (hi-res path).
+  // iOS: audio.volume is ignored during normal hi-res playback — the slider moves but
+  // can't change output (use the phone's volume buttons); it only takes effect once the
+  // Web Audio graph is live (during/after a fade). We drive both so it works everywhere it can.
   bindSlider($('vol-track'), (p) => {
     S.volume = p; S.savedVolume = p;
-    if (!S.fadeId) audio.volume = p;
+    if (!S._fadeStarted) {
+      audio.volume = p;
+      if (gainNode && audioCtx) { try { gainNode.gain.setValueAtTime(p, audioCtx.currentTime); } catch {} }
+    }
     updateVolUI();
   }, { onEnd: () => savePersist() });
 
