@@ -1044,7 +1044,12 @@ function preloadMetaFromCache() {
     if (m.album)    t.album    = m.album;
     if (m.duration) t.duration = m.duration;
     if (m.artKey)   t._artKey  = m.artKey;
-    t._metaCached = true; // signals fetchTrackMeta to skip S3 if no art pending
+    // _metaCached = true only when we're certain no S3 fetch is needed:
+    //   • artKey set → art is in OPFS, path 1 handles it
+    //   • noArt confirmed → file has no embedded art, nothing to fetch
+    // If artKey is null AND noArt is not set (e.g. a prior failed OPFS save),
+    // leave _metaCached unset so fetchTrackMeta falls through to path 3 and retries.
+    if (m.artKey || m.noArt) t._metaCached = true;
   }
 }
 
@@ -1196,11 +1201,12 @@ async function fetchTrackMeta(t) {
       S.metaCache[t.id] = { fromCache: true };
       return S.metaCache[t.id];
     }
-    // Art file gone from OPFS (storage evicted?) — clear key and re-fetch below
+    // Art file gone from OPFS (storage evicted?) — clear both flags so path 3 re-fetches
     t._artKey = null;
+    t._metaCached = false;
   }
 
-  // ── Fast path: text metadata cached, no art to load ──
+  // ── Fast path: text metadata cached AND confirmed no embedded art in file ──
   if (t._metaCached) { S.metaCache[t.id] = { fromCache: true }; return S.metaCache[t.id]; }
 
   // ── First-time: partial S3 fetch → parse → persist ──
@@ -1215,6 +1221,7 @@ async function fetchTrackMeta(t) {
 
     // Save cover art to OPFS
     let artKey = null;
+    const hadArt = !!meta.coverBlob; // remember before we delete it
     if (meta.coverBlob) {
       artKey = await saveArtToOPFS(t.id, meta.coverBlob);
       meta.coverUrl = createTrackedObjectUrl(meta.coverBlob);
@@ -1229,10 +1236,14 @@ async function fetchTrackMeta(t) {
     if (meta.durationMs && !t.duration) t.duration = meta.durationMs / 1000;
     if (meta.coverUrl) t.coverUrl = meta.coverUrl;
 
-    // Persist text metadata to localStorage for future sessions
+    // Persist text metadata to localStorage for future sessions.
+    // noArt:true means the file genuinely has no embedded artwork (vs. a failed OPFS save).
+    // On next launch, _metaCached is only set when artKey is cached OR noArt is confirmed —
+    // so a track with hadArt=true but artKey=null (failed save) will retry path 3 next time.
     setLSMeta(t.id, {
       title: t.title, artist: t.artist || null, album: t.album || null,
       duration: t.duration || null, artKey,
+      noArt: !hadArt,
     });
 
     S.metaCache[t.id] = meta;
