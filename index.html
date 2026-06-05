@@ -107,6 +107,10 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 }
 .icon-btn:active { background: var(--fill2); }
 .icon-btn.accent { border-color: var(--accent); color: var(--accent); }
+.topbar-actions { display: flex; align-items: center; gap: 9px; }
+#refresh-art-btn { font-size: 19px; }
+#refresh-art-btn.spinning { color: var(--accent); border-color: var(--accent); animation: spin 0.9s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 #topbar-select { display: none; align-items: center; justify-content: space-between; padding: 8px 18px 12px; flex: 0 0 auto; }
 #topbar-select.active { display: flex; }
@@ -286,7 +290,10 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
   <div id="home">
     <div class="topbar" id="topbar-normal">
       <div class="topbar-brand"><span class="moon"></span><span class="wordmark">Snoozz</span></div>
-      <button class="icon-btn" data-action="open-timer" title="Sleep timer">&#9201;</button>
+      <div class="topbar-actions">
+        <button class="icon-btn" id="refresh-art-btn" data-action="refresh-art" title="Refresh cover art">&#8635;</button>
+        <button class="icon-btn" data-action="open-timer" title="Sleep timer">&#9201;</button>
+      </div>
     </div>
     <div id="topbar-select">
       <button class="side left" data-action="cancel-select">Cancel</button>
@@ -1253,16 +1260,61 @@ async function fetchTrackMeta(t) {
 
 // Fetch metadata for all tracks concurrently (max 3 in-flight); update tiles as each arrives.
 function fetchMetaAll() {
-  const queue = S.tracks.slice();
-  let inFlight = 0;
-  const MAX = 3;
-  function pump() {
-    while (inFlight < MAX && queue.length > 0) {
-      const t = queue.shift(); inFlight++;
-      fetchTrackMeta(t).then(() => { inFlight--; updateTileDOM(t.id); pump(); });
+  return new Promise((resolve) => {
+    const queue = S.tracks.slice();
+    let inFlight = 0, done = 0;
+    const total = queue.length;
+    const MAX = 3;
+    if (!total) { resolve(); return; }
+    function pump() {
+      while (inFlight < MAX && queue.length > 0) {
+        const t = queue.shift(); inFlight++;
+        fetchTrackMeta(t).then(() => {
+          inFlight--; done++; updateTileDOM(t.id);
+          if (done >= total) resolve(); else pump();
+        });
+      }
     }
+    pump();
+  });
+}
+
+// Manual "redownload all cover art" — wipe every cache layer and re-fetch from cloud.
+// Clears OPFS art dir, localStorage meta, in-memory metaCache, and per-track art state,
+// then runs a fresh fetchMetaAll so every cover comes straight from S3.
+async function refreshAllArt() {
+  if (S._refreshingArt) return;
+  if (!navigator.onLine) { toast('No network — connect to refresh art'); return; }
+  if (!S.tracks.length) return;
+  S._refreshingArt = true;
+  const btn = $('refresh-art-btn');
+  btn.classList.add('spinning');
+  toast('Refreshing cover art…');
+  try {
+    // 1. wipe OPFS art directory
+    try {
+      const root = await navigator.storage.getDirectory();
+      await root.removeEntry(ART_DIR, { recursive: true });
+    } catch { /* dir may not exist */ }
+    // 2. wipe localStorage metadata cache
+    try { localStorage.removeItem('snoozz_meta'); } catch {}
+    // 3. reset in-memory + per-track caches so all 3 fast paths miss
+    S.metaCache = {};
+    for (const t of S.tracks) {
+      t._artKey = null;
+      t._metaCached = false;
+      if (t.coverUrl) { try { URL.revokeObjectURL(t.coverUrl); } catch {} S.objectUrls.delete(t.coverUrl); t.coverUrl = null; }
+    }
+    renderGrid();              // show color blocks while we re-fetch
+    await fetchMetaAll();      // pulls fresh metadata + art from S3
+    toast('Cover art refreshed');
+  } catch (e) {
+    console.warn('refreshArt', e.message);
+    toast('Refresh failed: ' + e.message);
+  } finally {
+    btn.classList.remove('spinning');
+    S._refreshingArt = false;
   }
-  pump();
 }
 
 // ── Tile rendering helpers ──
@@ -1561,6 +1613,7 @@ function bindSlider(trackEl, onSet, opts = {}) {
 const actions = {
   'login': handleLogin,
   'unlock': handleUnlock,
+  'refresh-art': refreshAllArt,
   'full-login': showFullLogin,
   'open-timer': openSheet,
   'close-sheet': closeSheet,
