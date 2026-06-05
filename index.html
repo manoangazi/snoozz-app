@@ -129,25 +129,28 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 .tile:active .block { transform: scale(0.97); }
 .tile.selected .block { box-shadow: 0 0 0 2px var(--accent), 0 0 14px var(--accent-dim); }
 .tile.playing .block { box-shadow: 0 0 0 1.5px var(--accent-dim); }
-.tile-title {
-  position: absolute; left: 9px; right: 9px; bottom: 8px; font-size: 13px; font-weight: 600;
-  color: rgba(255,255,255,0.94); line-height: 1.12; text-shadow: 0 1px 4px rgba(0,0,0,0.4);
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
+/* cover art image fills the block */
+.tile-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; display: block; }
+/* gradient overlay for text legibility over art or dark colour blocks */
+.tile-overlay { position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 30%, rgba(0,0,0,0.82) 100%); z-index: 1; pointer-events: none; }
+/* metadata block pinned to tile bottom */
+.tile-meta { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 8px 7px; z-index: 2; }
+.tile-title { display: block; font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.96); line-height: 1.2; text-shadow: 0 1px 4px rgba(0,0,0,0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-sub { display: block; font: 9px var(--mono); color: rgba(255,255,255,0.58); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.01em; }
 .tile-badge {
   position: absolute; right: 6px; top: 6px; width: 19px; height: 19px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center; font: 11px var(--mono);
   background: rgba(13,14,18,0.6); border: 1.2px solid var(--ink-dim); color: var(--ink-dim);
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px); z-index: 3;
 }
 .tile-badge.local { color: var(--accent); border-color: var(--accent); }
 .tile-badge.offline { color: var(--warn); border-color: var(--warn); }
 .tile-num {
   position: absolute; right: 6px; top: 6px; width: 20px; height: 20px; border-radius: 50%;
   background: var(--accent); color: var(--on-accent); font-weight: 700; font-size: 12px;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: center; justify-content: center; z-index: 3;
 }
-.tile-wave { position: absolute; left: 7px; top: 7px; display: inline-flex; align-items: flex-end; gap: 1.5px; height: 12px; }
+.tile-wave { position: absolute; left: 7px; top: 7px; display: inline-flex; align-items: flex-end; gap: 1.5px; height: 12px; z-index: 3; }
 .tile-wave span { width: 2px; background: var(--accent); border-radius: 1px; animation: wave 0.9s ease-in-out infinite; }
 .tile-wave span:nth-child(1){height:5px;animation-delay:0s}
 .tile-wave span:nth-child(2){height:11px;animation-delay:.15s}
@@ -174,7 +177,8 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 /* ── Mini bar ── */
 #mini { display: none; margin: 0 12px 10px; padding: 9px 11px; border-radius: var(--r-bar); border: 1.5px solid var(--ink-faint); background: var(--bg-raised); align-items: center; gap: 11px; flex: 0 0 auto; cursor: pointer; }
 #mini.active { display: flex; }
-.mini-art { width: 40px; height: 40px; border-radius: 9px; flex: 0 0 auto; background: oklch(0.42 0.07 var(--mini-hue, 248)); }
+.mini-art { width: 40px; height: 40px; border-radius: 9px; flex: 0 0 auto; background: oklch(0.42 0.07 var(--mini-hue, 248)); overflow: hidden; position: relative; }
+.mini-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
 .mini-info { flex: 1 1 auto; min-width: 0; }
 .mini-title { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mini-sub { font: 10px var(--mono); color: var(--ink-dim); margin-top: 2px; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -191,8 +195,10 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 .np-iconbtn.accent { color: var(--accent); }
 .np-body { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 22px; padding: 0 28px; min-height: 0; }
 .np-cover-wrap { position: relative; width: 280px; max-width: 78vw; aspect-ratio: 1/1; margin: 0 auto; }
-.np-cover { position: absolute; inset: 14px; border-radius: var(--r-sheet); background: oklch(0.42 0.07 var(--np-hue, 248)); display: flex; align-items: flex-end; padding: 18px; }
-.np-cover-title { font-size: 22px; font-weight: 700; color: rgba(255,255,255,0.95); text-shadow: 0 1px 6px rgba(0,0,0,0.4); }
+.np-cover { position: absolute; inset: 14px; border-radius: var(--r-sheet); background: oklch(0.42 0.07 var(--np-hue, 248)); display: flex; align-items: flex-end; padding: 18px; overflow: hidden; }
+.np-cover-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: var(--r-sheet); display: none; }
+.np-cover-overlay { position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.7) 100%); display: none; border-radius: var(--r-sheet); }
+.np-cover-title { font-size: 22px; font-weight: 700; color: rgba(255,255,255,0.95); text-shadow: 0 1px 6px rgba(0,0,0,0.4); position: relative; z-index: 1; }
 .np-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
 .np-ring circle { fill: none; }
 .np-ring .track { stroke: var(--ink-faint); stroke-width: 1.2; }
@@ -305,7 +311,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
     </div>
 
     <div id="mini" data-action="expand">
-      <div class="mini-art" id="mini-art"></div>
+      <div class="mini-art" id="mini-art"><img id="mini-art-img" alt=""></div>
       <div class="mini-info">
         <div class="mini-title" id="mini-title">—</div>
         <div class="mini-sub" id="mini-sub"></div>
@@ -324,7 +330,11 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
     </div>
     <div class="np-body">
       <div class="np-cover-wrap">
-        <div class="np-cover" id="np-cover"><span class="np-cover-title" id="np-cover-title"></span></div>
+        <div class="np-cover" id="np-cover">
+          <img class="np-cover-img" id="np-cover-img" alt="">
+          <div class="np-cover-overlay" id="np-cover-overlay"></div>
+          <span class="np-cover-title" id="np-cover-title"></span>
+        </div>
         <svg class="np-ring" id="np-ring" viewBox="0 0 100 100" style="display:none">
           <circle class="track" cx="50" cy="50" r="48"></circle>
           <circle class="arc" id="np-arc" cx="50" cy="50" r="48" stroke-dasharray="301.6" stroke-dashoffset="0"></circle>
@@ -417,6 +427,7 @@ const S = {
   tickId: null, fadeId: null,
   connectivity: navigator.onLine ? 'online' : 'offline',
   urlCache: {}, objectUrls: new Set(),
+  metaCache: {},      // { [trackId]: parsed metadata object }
   positions: {},
   expanded: false,
   scrubDragging: false,
@@ -971,6 +982,225 @@ function startTimerFromSheet() {
 // ══════════════════════════════════════════════════════════════
 //  Rendering
 // ══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
+//  METADATA PARSING — ID3v2 (MP3), MP4 atoms (M4A/AAC), FLAC
+// ══════════════════════════════════════════════════════════════
+const META_FETCH_BYTES = 1_048_576; // 1 MB — enough for most tags + embedded art
+
+async function fetchPartialAudio(key) {
+  try {
+    const resp = await S.s3.signedRequest('GET', '/' + key, {
+      headers: { range: `bytes=0-${META_FETCH_BYTES - 1}` },
+    });
+    if (!resp.ok && resp.status !== 206) return null;
+    return resp.arrayBuffer();
+  } catch { return null; }
+}
+
+async function parseID3v2(buf) {
+  const dv = new DataView(buf);
+  const r = { title: null, artist: null, album: null, durationMs: null, coverBlob: null };
+  if (dv.byteLength < 10) return r;
+  if (String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2)) !== 'ID3') return r;
+  const majorVer = dv.getUint8(3);
+  const tagSize = ((dv.getUint8(6) & 0x7f) << 21) | ((dv.getUint8(7) & 0x7f) << 14) |
+                  ((dv.getUint8(8) & 0x7f) << 7)  |  (dv.getUint8(9) & 0x7f);
+  let offset = 10;
+  const end = Math.min(10 + tagSize, dv.byteLength);
+  while (offset + 10 < end) {
+    const fid = String.fromCharCode(dv.getUint8(offset), dv.getUint8(offset+1), dv.getUint8(offset+2), dv.getUint8(offset+3));
+    if (!/^[A-Z0-9]{4}$/.test(fid)) break;
+    const fsize = majorVer === 4
+      ? ((dv.getUint8(offset+4)&0x7f)<<21)|((dv.getUint8(offset+5)&0x7f)<<14)|((dv.getUint8(offset+6)&0x7f)<<7)|(dv.getUint8(offset+7)&0x7f)
+      : (dv.getUint8(offset+4)<<24)|(dv.getUint8(offset+5)<<16)|(dv.getUint8(offset+6)<<8)|dv.getUint8(offset+7);
+    if (fsize <= 0 || offset + 10 + fsize > end) break;
+    const fs = offset + 10, fe = fs + fsize;
+    if (['TIT2','TPE1','TALB','TLEN'].includes(fid)) {
+      const enc = dv.getUint8(fs);
+      const bytes = new Uint8Array(buf, fs + 1, fsize - 1);
+      const str = (enc === 1 || enc === 2) ? new TextDecoder('utf-16').decode(bytes)
+                : new TextDecoder(enc === 3 ? 'utf-8' : 'latin1').decode(bytes);
+      const val = str.replace(/\0/g, '').trim();
+      if (fid === 'TIT2') r.title = val;
+      else if (fid === 'TPE1') r.artist = val;
+      else if (fid === 'TALB') r.album = val;
+      else if (fid === 'TLEN') r.durationMs = parseInt(val, 10) || null;
+    }
+    if (fid === 'APIC' && !r.coverBlob) {
+      let p = fs;
+      const enc = dv.getUint8(p++);
+      let mime = '';
+      while (p < fe && dv.getUint8(p) !== 0) mime += String.fromCharCode(dv.getUint8(p++));
+      p++; p++; // null terminator + picture type byte
+      if (enc === 1 || enc === 2) { while (p + 1 < fe && !(dv.getUint8(p) === 0 && dv.getUint8(p+1) === 0)) p++; p += 2; }
+      else { while (p < fe && dv.getUint8(p) !== 0) p++; p++; }
+      if (p < fe) r.coverBlob = new Blob([new Uint8Array(buf, p, fe - p)], { type: mime || 'image/jpeg' });
+    }
+    offset = fe;
+  }
+  return r;
+}
+
+function _readAtom(dv, off) {
+  if (off + 8 > dv.byteLength) return null;
+  let size = dv.getUint32(off);
+  const type = String.fromCharCode(dv.getUint8(off+4), dv.getUint8(off+5), dv.getUint8(off+6), dv.getUint8(off+7));
+  if (size === 1 && off + 16 <= dv.byteLength) { const hi = dv.getUint32(off+8), lo = dv.getUint32(off+12); size = hi * 0x100000000 + lo; }
+  if (size === 0) size = dv.byteLength - off;
+  return size >= 8 ? { type, off, size, dOff: off + 8 } : null;
+}
+function _findAtom(dv, start, end, t) {
+  let o = start;
+  while (o + 8 <= end) { const a = _readAtom(dv, o); if (!a) break; if (a.type === t) return a; o += a.size; }
+  return null;
+}
+
+async function parseMP4Meta(buf) {
+  const dv = new DataView(buf);
+  const r = { title: null, artist: null, album: null, durationMs: null, coverBlob: null };
+  const moov = _findAtom(dv, 0, dv.byteLength, 'moov'); if (!moov) return r;
+  const moovEnd = moov.off + moov.size;
+  // Duration from mvhd
+  const mvhd = _findAtom(dv, moov.dOff, moovEnd, 'mvhd');
+  if (mvhd) {
+    const ver = dv.getUint8(mvhd.dOff);
+    const ts = ver === 1 ? dv.getUint32(mvhd.dOff + 20) : dv.getUint32(mvhd.dOff + 12);
+    const dur = ver === 1 ? dv.getUint32(mvhd.dOff + 28) * 0x100000000 + dv.getUint32(mvhd.dOff + 32) : dv.getUint32(mvhd.dOff + 16);
+    if (ts > 0) r.durationMs = Math.round(dur / ts * 1000);
+  }
+  // iTunes ilst
+  const udta = _findAtom(dv, moov.dOff, moovEnd, 'udta'); if (!udta) return r;
+  const meta = _findAtom(dv, udta.dOff, udta.off + udta.size, 'meta'); if (!meta) return r;
+  const ilst = _findAtom(dv, meta.dOff + 4, meta.off + meta.size, 'ilst'); if (!ilst) return r;
+  let o = ilst.dOff;
+  const ilstEnd = ilst.off + ilst.size;
+  while (o + 8 <= ilstEnd) {
+    const item = _readAtom(dv, o); if (!item) break;
+    const data = _findAtom(dv, item.dOff, item.off + item.size, 'data');
+    if (data && data.dOff + 8 <= data.off + data.size) {
+      const flags = dv.getUint32(data.dOff), dStart = data.dOff + 8, dLen = data.off + data.size - dStart;
+      if (dLen > 0 && flags === 1 && ['©nam','©ART','©alb'].includes(item.type)) {
+        const s = new TextDecoder('utf-8').decode(new Uint8Array(buf, dStart, dLen)).trim();
+        if (item.type === '©nam') r.title = s;
+        else if (item.type === '©ART') r.artist = s;
+        else if (item.type === '©alb') r.album = s;
+      } else if (dLen > 0 && (flags === 13 || flags === 14) && !r.coverBlob) {
+        r.coverBlob = new Blob([new Uint8Array(buf, dStart, dLen)], { type: flags === 14 ? 'image/png' : 'image/jpeg' });
+      }
+    }
+    o += item.size;
+  }
+  return r;
+}
+
+async function parseFLACMeta(buf) {
+  const dv = new DataView(buf);
+  const r = { title: null, artist: null, album: null, durationMs: null, coverBlob: null };
+  if (dv.byteLength < 4 || String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3)) !== 'fLaC') return r;
+  let off = 4;
+  while (off + 4 <= dv.byteLength) {
+    const b0 = dv.getUint8(off), isLast = (b0 & 0x80) !== 0, blockType = b0 & 0x7f;
+    const bLen = (dv.getUint8(off+1) << 16) | (dv.getUint8(off+2) << 8) | dv.getUint8(off+3);
+    const bs = off + 4, be = bs + bLen; if (be > dv.byteLength) break;
+    if (blockType === 0 && bLen >= 18) { // STREAMINFO — get sample rate + total samples for duration
+      const sr = ((dv.getUint8(bs+10) << 12) | (dv.getUint8(bs+11) << 4) | (dv.getUint8(bs+12) >> 4)) & 0xFFFFF;
+      const tsHi = dv.getUint8(bs+13) & 0x0F;
+      const ts = tsHi * 0x100000000 + ((dv.getUint8(bs+14)<<24)|(dv.getUint8(bs+15)<<16)|(dv.getUint8(bs+16)<<8)|dv.getUint8(bs+17));
+      if (sr > 0) r.durationMs = Math.round(ts / sr * 1000);
+    } else if (blockType === 4) { // VORBIS_COMMENT
+      let p = bs;
+      const vLen = dv.getUint8(p)|(dv.getUint8(p+1)<<8)|(dv.getUint8(p+2)<<16)|(dv.getUint8(p+3)<<24); p += 4 + vLen;
+      if (p + 4 <= be) {
+        const count = dv.getUint8(p)|(dv.getUint8(p+1)<<8)|(dv.getUint8(p+2)<<16)|(dv.getUint8(p+3)<<24); p += 4;
+        for (let i = 0; i < count && p + 4 <= be; i++) {
+          const cLen = dv.getUint8(p)|(dv.getUint8(p+1)<<8)|(dv.getUint8(p+2)<<16)|(dv.getUint8(p+3)<<24); p += 4;
+          if (p + cLen > be) break;
+          const c = new TextDecoder('utf-8').decode(new Uint8Array(buf, p, cLen)); p += cLen;
+          const eq = c.indexOf('='); if (eq < 1) continue;
+          const k = c.slice(0, eq).toUpperCase(), v = c.slice(eq + 1);
+          if (k === 'TITLE') r.title = v; else if (k === 'ARTIST') r.artist = v; else if (k === 'ALBUM') r.album = v;
+        }
+      }
+    } else if (blockType === 6 && !r.coverBlob) { // PICTURE
+      let p = bs + 4; // skip picture type
+      const mLen = (dv.getUint8(p)<<24)|(dv.getUint8(p+1)<<16)|(dv.getUint8(p+2)<<8)|dv.getUint8(p+3); p += 4;
+      const mime = new TextDecoder('ascii').decode(new Uint8Array(buf, p, mLen)); p += mLen;
+      const dscLen = (dv.getUint8(p)<<24)|(dv.getUint8(p+1)<<16)|(dv.getUint8(p+2)<<8)|dv.getUint8(p+3); p += 4 + dscLen + 16;
+      const imgLen = (dv.getUint8(p)<<24)|(dv.getUint8(p+1)<<16)|(dv.getUint8(p+2)<<8)|dv.getUint8(p+3); p += 4;
+      if (p + imgLen <= be) r.coverBlob = new Blob([new Uint8Array(buf, p, imgLen)], { type: mime || 'image/jpeg' });
+    }
+    off = be; if (isLast) break;
+  }
+  return r;
+}
+
+async function fetchTrackMeta(t) {
+  if (S.metaCache[t.id]) return S.metaCache[t.id];
+  try {
+    const buf = await fetchPartialAudio(t.key); if (!buf) return null;
+    const ext = t.name.toLowerCase();
+    let meta;
+    if (ext.endsWith('.mp3'))                     meta = await parseID3v2(buf);
+    else if (ext.endsWith('.m4a') || ext.endsWith('.aac')) meta = await parseMP4Meta(buf);
+    else if (ext.endsWith('.flac'))               meta = await parseFLACMeta(buf);
+    else meta = { title: null, artist: null, album: null, durationMs: null, coverBlob: null };
+
+    if (meta.coverBlob) { meta.coverUrl = createTrackedObjectUrl(meta.coverBlob); delete meta.coverBlob; }
+    // Enrich track with parsed fields (only if not already set by metadata.json)
+    if (meta.title && !t._hasJsonMeta) t.title = meta.title;
+    if (meta.artist) t.artist = meta.artist;
+    if (meta.album) t.album = meta.album;
+    if (meta.durationMs && !t.duration) t.duration = meta.durationMs / 1000;
+    if (meta.coverUrl) t.coverUrl = meta.coverUrl;
+    S.metaCache[t.id] = meta;
+    return meta;
+  } catch (e) { console.warn('meta', t.key, e.message); S.metaCache[t.id] = {}; return null; }
+}
+
+// Fetch metadata for all tracks concurrently (max 3 in-flight); update tiles as each arrives.
+function fetchMetaAll() {
+  const queue = S.tracks.slice();
+  let inFlight = 0;
+  const MAX = 3;
+  function pump() {
+    while (inFlight < MAX && queue.length > 0) {
+      const t = queue.shift(); inFlight++;
+      fetchTrackMeta(t).then(() => { inFlight--; updateTileDOM(t.id); pump(); });
+    }
+  }
+  pump();
+}
+
+// ── Tile rendering helpers ──
+function buildTileHTML(t) {
+  const sel = S.selectMode && S.mix.includes(t.id);
+  const selIdx = sel ? S.mix.indexOf(t.id) + 1 : 0;
+  const playing = t.id === S.playingId && S.isPlaying;
+  const dim = S.selectMode && !sel;
+  const disabled = !isPlayable(t);
+  const kind = badgeKind(t);
+  const glyph = kind === 'local' ? '&#8595;' : kind === 'offline' ? '&#9888;' : '&#9729;';
+  const corner = sel ? `<span class="tile-num">${selIdx}</span>` : `<span class="tile-badge ${kind}">${glyph}</span>`;
+  const wave = playing ? '<span class="tile-wave"><span></span><span></span><span></span><span></span><span></span></span>' : '';
+  const img = t.coverUrl ? `<img class="tile-img" src="${t.coverUrl}" alt="">` : '';
+  const parts = [];
+  if (t.artist) parts.push(escHtml(t.artist));
+  if (t.album && t.album !== t.artist) parts.push(escHtml(t.album));
+  if (t.duration) parts.push(formatTime(t.duration));
+  const sub = parts.length ? `<span class="tile-sub">${parts.join(' · ')}</span>` : '';
+  return `<div class="tile${sel?' selected':''}${playing?' playing':''}${dim?' dim':''}${disabled?' disabled':''}" data-id="${escHtml(t.id)}" style="--hue:${t.hue}">
+    <div class="block">${img}<div class="tile-overlay"></div>${wave}${corner}<div class="tile-meta"><span class="tile-title">${escHtml(t.title)}</span>${sub}</div></div>
+  </div>`;
+}
+
+function updateTileDOM(id) {
+  const t = S.byId[id]; if (!t) return;
+  const el = document.querySelector(`.tile[data-id="${CSS.escape(id)}"]`); if (!el) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = buildTileHTML(t);
+  el.replaceWith(tmp.firstElementChild);
+}
+
 function renderGrid() {
   const grid = $('grid');
   if (!S.tracks.length) {
@@ -981,23 +1211,7 @@ function renderGrid() {
     return;
   }
   $('empty-note').style.display = 'none';
-  const html = S.tracks.map(t => {
-    const sel = S.selectMode && S.mix.includes(t.id);
-    const selIdx = sel ? S.mix.indexOf(t.id) + 1 : 0;
-    const playing = t.id === S.playingId && S.isPlaying;
-    const dim = S.selectMode && !sel;
-    const disabled = !isPlayable(t);
-    const kind = badgeKind(t);
-    const glyph = kind === 'local' ? '&#8595;' : kind === 'offline' ? '&#9888;' : '&#9729;';
-    let corner;
-    if (sel) corner = `<span class="tile-num">${selIdx}</span>`;
-    else corner = `<span class="tile-badge ${kind}">${glyph}</span>`;
-    const wave = playing ? '<span class="tile-wave"><span></span><span></span><span></span><span></span><span></span></span>' : '';
-    return `<div class="tile${sel ? ' selected' : ''}${playing ? ' playing' : ''}${dim ? ' dim' : ''}${disabled ? ' disabled' : ''}" data-id="${escHtml(t.id)}" style="--hue:${t.hue}">
-      <div class="block">${wave}${corner}<span class="tile-title">${escHtml(t.title)}</span></div>
-    </div>`;
-  }).join('');
-  grid.innerHTML = html;
+  grid.innerHTML = S.tracks.map(buildTileHTML).join('');
 }
 
 function showMini() { $('mini').classList.add('active'); updateMini(); }
@@ -1013,10 +1227,15 @@ function updateMini() {
   const t = currentTrack();
   if (!t) { $('mini').classList.remove('active'); return; }
   $('mini-art').style.setProperty('--mini-hue', t.hue);
+  const img = $('mini-art-img');
+  if (t.coverUrl) { img.src = t.coverUrl; img.style.display = 'block'; }
+  else { img.style.display = 'none'; img.src = ''; }
   $('mini-title').textContent = t.title;
-  let sub = sourceWord(t) + ' · ';
-  sub += S.queue.length > 1 ? (S.timer.minutes ? `${S.timer.minutes}-min mix` : 'mix') : 'single track';
-  $('mini-sub').textContent = sub;
+  const parts = [];
+  if (t.artist) parts.push(t.artist);
+  if (!parts.length) parts.push(sourceWord(t));
+  parts.push(S.queue.length > 1 ? (S.timer.minutes ? `${S.timer.minutes}-min mix` : 'mix') : 'single track');
+  $('mini-sub').textContent = parts.join(' · ');
 }
 
 function updatePlayIcons() {
@@ -1054,11 +1273,20 @@ function renderNowPlaying() {
   if (!t) return;
   $('np-context').textContent = modeLabel();
   $('np-cover').style.setProperty('--np-hue', t.hue);
-  $('np-cover-title').textContent = t.title;
+  // Cover art
+  const npImg = $('np-cover-img'), npOvl = $('np-cover-overlay');
+  if (t.coverUrl) { npImg.src = t.coverUrl; npImg.style.display = 'block'; npOvl.style.display = 'block'; }
+  else { npImg.style.display = 'none'; npImg.src = ''; npOvl.style.display = 'none'; }
+  $('np-cover-title').textContent = t.coverUrl ? '' : t.title;
+  // Title + artist/album
   $('np-title').textContent = t.title;
   const g = t.cached ? '&#8595;' : (S.connectivity === 'offline' ? '&#9888;' : '&#9729;');
+  const meta = [t.artist, t.album].filter(Boolean).join(' · ');
   if (S.timer.isRunning) updateTimerUI();
-  else $('np-source').innerHTML = `${sourceWord(t)} · ${g}`;
+  else {
+    const srcLine = `${sourceWord(t)} · ${g}`;
+    $('np-source').innerHTML = meta ? `${escHtml(meta)}<br><span style="opacity:.6">${srcLine}</span>` : srcLine;
+  }
   $('np-dl').classList.toggle('accent', t.cached);
   $('loop-btn').classList.toggle('on', S.loopMode);
   updateScrubber();
@@ -1198,7 +1426,10 @@ async function bootApp() {
   renderGrid();
   updateVolUI();
   hideLoading();
-  if (S.tracks.length) toast(`${S.tracks.length} sound${S.tracks.length !== 1 ? 's' : ''} ready`);
+  if (S.tracks.length) {
+    toast(`${S.tracks.length} sound${S.tracks.length !== 1 ? 's' : ''} ready`);
+    fetchMetaAll(); // background — updates tiles as art/metadata arrives
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1348,12 +1579,11 @@ function bindEvents() {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  PWA: manifest (runtime blob) + service worker
+//  PWA: service worker (external sw.js + manifest.json)
 // ══════════════════════════════════════════════════════════════
-
 function registerServiceWorker() {
-  if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js").catch(() => {});
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 
 // ══════════════════════════════════════════════════════════════
