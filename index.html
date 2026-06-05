@@ -676,6 +676,7 @@ async function crawlTracks() {
 
   S.byId = {};
   for (const t of S.tracks) S.byId[t.id] = t;
+  preloadMetaFromCache(); // instant: restores title/artist/album/duration/artKey from localStorage
 
   hideLoading();
 }
@@ -997,6 +998,57 @@ async function fetchPartialAudio(key) {
   } catch { return null; }
 }
 
+// ── Persistent metadata cache (survives app relaunches) ──
+// Art blobs → OPFS snoozz-art/  |  Text fields → localStorage snoozz_meta
+
+const ART_DIR = 'snoozz-art';
+function _artFilename(trackId, mime) { return hashStr(trackId).toString(36) + (mime === 'image/png' ? '.png' : '.jpg'); }
+
+async function saveArtToOPFS(trackId, blob) {
+  if (!navigator.storage?.getDirectory) return null;
+  try {
+    const root = await navigator.storage.getDirectory();
+    const dir  = await root.getDirectoryHandle(ART_DIR, { create: true });
+    const fname = _artFilename(trackId, blob.type);
+    const fh = await dir.getFileHandle(fname, { create: true });
+    const wr = await fh.createWritable(); await wr.write(blob); await wr.close();
+    return fname;
+  } catch (e) { console.warn('saveArt', e.message); return null; }
+}
+
+async function loadArtFromOPFS(artKey) {
+  if (!navigator.storage?.getDirectory || !artKey) return null;
+  try {
+    const root = await navigator.storage.getDirectory();
+    const dir  = await root.getDirectoryHandle(ART_DIR, { create: false });
+    return (await dir.getFileHandle(artKey, { create: false })).getFile();
+  } catch { return null; }
+}
+
+function getLSMeta() {
+  try { return JSON.parse(localStorage.getItem('snoozz_meta') || '{}'); } catch { return {}; }
+}
+function setLSMeta(trackId, data) {
+  try { const all = getLSMeta(); all[trackId] = data; localStorage.setItem('snoozz_meta', JSON.stringify(all)); } catch {}
+}
+
+// Called once after crawlTracks builds S.tracks.
+// Pre-populates each track with cached text + marks artKey so fetchMetaAll
+// can load art from OPFS instead of hitting S3.
+function preloadMetaFromCache() {
+  const all = getLSMeta();
+  for (const t of S.tracks) {
+    const m = all[t.id]; if (!m) continue;
+    if (m.title)    t.title    = m.title;
+    if (m.artist)   t.artist   = m.artist;
+    if (m.album)    t.album    = m.album;
+    if (m.duration) t.duration = m.duration;
+    if (m.artKey)   t._artKey  = m.artKey;
+    t._metaCached = true; // signals fetchTrackMeta to skip S3 if no art pending
+  }
+}
+}
+
 async function parseID3v2(buf) {
   const dv = new DataView(buf);
   const r = { title: null, artist: null, album: null, durationMs: null, coverBlob: null };
@@ -1136,22 +1188,54 @@ async function parseFLACMeta(buf) {
 
 async function fetchTrackMeta(t) {
   if (S.metaCache[t.id]) return S.metaCache[t.id];
+
+  // ── Fast path: load art from OPFS (no S3 request) ──
+  if (t._artKey) {
+    const artFile = await loadArtFromOPFS(t._artKey);
+    if (artFile) {
+      t.coverUrl = createTrackedObjectUrl(artFile);
+      S.metaCache[t.id] = { fromCache: true };
+      return S.metaCache[t.id];
+    }
+    // Art file gone from OPFS (storage evicted?) — clear key and re-fetch below
+    t._artKey = null;
+  }
+
+  // ── Fast path: text metadata cached, no art to load ──
+  if (t._metaCached) { S.metaCache[t.id] = { fromCache: true }; return S.metaCache[t.id]; }
+
+  // ── First-time: partial S3 fetch → parse → persist ──
   try {
     const buf = await fetchPartialAudio(t.key); if (!buf) return null;
     const ext = t.name.toLowerCase();
     let meta;
-    if (ext.endsWith('.mp3'))                     meta = await parseID3v2(buf);
+    if (ext.endsWith('.mp3'))                              meta = await parseID3v2(buf);
     else if (ext.endsWith('.m4a') || ext.endsWith('.aac')) meta = await parseMP4Meta(buf);
-    else if (ext.endsWith('.flac'))               meta = await parseFLACMeta(buf);
+    else if (ext.endsWith('.flac'))                        meta = await parseFLACMeta(buf);
     else meta = { title: null, artist: null, album: null, durationMs: null, coverBlob: null };
 
-    if (meta.coverBlob) { meta.coverUrl = createTrackedObjectUrl(meta.coverBlob); delete meta.coverBlob; }
-    // Enrich track with parsed fields (only if not already set by metadata.json)
-    if (meta.title && !t._hasJsonMeta) t.title = meta.title;
-    if (meta.artist) t.artist = meta.artist;
-    if (meta.album) t.album = meta.album;
+    // Save cover art to OPFS
+    let artKey = null;
+    if (meta.coverBlob) {
+      artKey = await saveArtToOPFS(t.id, meta.coverBlob);
+      meta.coverUrl = createTrackedObjectUrl(meta.coverBlob);
+      delete meta.coverBlob;
+      if (artKey) t._artKey = artKey;
+    }
+
+    // Apply parsed fields to the track object
+    if (meta.title)   t.title    = meta.title;
+    if (meta.artist)  t.artist   = meta.artist;
+    if (meta.album)   t.album    = meta.album;
     if (meta.durationMs && !t.duration) t.duration = meta.durationMs / 1000;
     if (meta.coverUrl) t.coverUrl = meta.coverUrl;
+
+    // Persist text metadata to localStorage for future sessions
+    setLSMeta(t.id, {
+      title: t.title, artist: t.artist || null, album: t.album || null,
+      duration: t.duration || null, artKey,
+    });
+
     S.metaCache[t.id] = meta;
     return meta;
   } catch (e) { console.warn('meta', t.key, e.message); S.metaCache[t.id] = {}; return null; }
