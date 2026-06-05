@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Snoozz">
+<meta name="theme-color" content="#0d0e12">
+<link rel="manifest" href="./manifest.json">
+<title>Snoozz — Sleep Music</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20512%20512%22%3E%3Crect%20width%3D%22512%22%20height%3D%22512%22%20rx%3D%22112%22%20fill%3D%22%230d0e12%22%2F%3E%3Ccircle%20cx%3D%22232%22%20cy%3D%22256%22%20r%3D%22150%22%20fill%3D%22%237da6d9%22%2F%3E%3Ccircle%20cx%3D%22300%22%20cy%3D%22216%22%20r%3D%22140%22%20fill%3D%22%230d0e12%22%2F%3E%3C%2Fsvg%3E">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --bg: #0d0e12;
+  --bg-raised: #101218;
+  --ink: rgba(228,233,243,0.82);
+  --ink-dim: rgba(228,233,243,0.42);
+  --ink-faint: rgba(228,233,243,0.18);
+  --fill: rgba(228,233,243,0.05);
+  --fill2: rgba(228,233,243,0.085);
+  --accent: oklch(0.74 0.085 248);
+  --accent-dim: oklch(0.74 0.085 248 / 0.22);
+  --accent-faint: oklch(0.74 0.085 248 / 0.12);
+  --on-accent: #08111c;
+  --warn: oklch(0.74 0.09 70);
+  --r-tile: 14px;
+  --r-bar: 16px;
+  --r-sheet: 22px;
+  --r-btn: 14px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: "Spline Sans Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html, body {
+  height: 100%; width: 100%;
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font); font-size: 15px; line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:focus:not(:focus-visible) { outline: none; }
+button { font-family: inherit; color: inherit; cursor: pointer; border: none; background: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+::-webkit-scrollbar { width: 0; height: 0; }
+
+#app {
+  display: flex; flex-direction: column;
+  height: 100vh; height: 100dvh;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+}
+
+/* ── Login ── */
+#login { display: none; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 28px; animation: fadeIn .5s ease; }
+#login.active { display: flex; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.moon { position: relative; width: 30px; height: 30px; flex: 0 0 auto; }
+.moon::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--accent); }
+.moon::after { content: ""; position: absolute; right: -6px; top: -3px; width: 26px; height: 26px; border-radius: 50%; background: var(--bg); }
+.wordmark { font-size: 34px; font-weight: 600; letter-spacing: 0.01em; }
+.login-sub { font: 11px var(--mono); color: var(--ink-dim); letter-spacing: 0.28em; text-transform: uppercase; margin-bottom: 34px; }
+.form { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 11px; }
+.form input {
+  background: var(--bg-raised); border: 1.5px solid var(--ink-faint); color: var(--ink);
+  padding: 13px 15px; border-radius: var(--r-btn); font-family: var(--mono); font-size: 14px; outline: none;
+  transition: border-color .2s; width: 100%;
+}
+.form input:focus { border-color: var(--accent); }
+.form input::placeholder { color: var(--ink-dim); }
+.row { display: flex; gap: 10px; }
+.row > * { flex: 1; min-width: 0; }
+.form-err { color: var(--warn); font: 12px var(--mono); text-align: center; min-height: 1.2em; }
+.btn-primary {
+  background: var(--accent); color: var(--on-accent); padding: 13px 22px; border-radius: var(--r-btn);
+  font-weight: 600; font-size: 15px; transition: filter .15s, transform .1s;
+}
+.btn-primary:active { transform: translateY(1px); }
+.btn-text { color: var(--ink-dim); font: 13px var(--mono); padding: 8px; text-align: center; }
+
+/* ── Home ── */
+#home { display: none; flex-direction: column; height: 100%; min-height: 0; }
+#home.active { display: flex; }
+
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 18px 12px; flex: 0 0 auto; }
+.topbar-brand { display: flex; align-items: center; gap: 9px; }
+.topbar-brand .moon { width: 18px; height: 18px; }
+.topbar-brand .moon::after { right: -3px; top: -2px; width: 15px; height: 15px; }
+.topbar-brand .wordmark { font-size: 25px; font-weight: 700; }
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 50%; border: 1.5px solid var(--ink-dim);
+  display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--ink);
+  transition: border-color .15s, background .15s;
+}
+.icon-btn:active { background: var(--fill2); }
+.icon-btn.accent { border-color: var(--accent); color: var(--accent); }
+
+#topbar-select { display: none; align-items: center; justify-content: space-between; padding: 8px 18px 12px; flex: 0 0 auto; }
+#topbar-select.active { display: flex; }
+#topbar-select .center { font-size: 17px; font-weight: 600; }
+#topbar-select .side { font: 15px var(--font); color: var(--ink-dim); padding: 8px; min-width: 56px; }
+#topbar-select .side.right { text-align: right; color: var(--accent); }
+#topbar-select .side.left { text-align: left; }
+
+#grid-scroll { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px 8px; min-height: 0; }
+#grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px; }
+
+.tile { position: relative; cursor: pointer; transition: opacity .15s; user-select: none; -webkit-user-select: none; }
+.tile.dim { opacity: 0.4; }
+.tile.disabled { opacity: 0.45; }
+.block {
+  position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: var(--r-tile);
+  background: oklch(0.42 0.07 var(--hue));
+  overflow: hidden; transition: box-shadow .2s, transform .12s;
+}
+.tile:active .block { transform: scale(0.97); }
+.tile.selected .block { box-shadow: 0 0 0 2px var(--accent), 0 0 14px var(--accent-dim); }
+.tile.playing .block { box-shadow: 0 0 0 1.5px var(--accent-dim); }
+.tile-title {
+  position: absolute; left: 9px; right: 9px; bottom: 8px; font-size: 13px; font-weight: 600;
+  color: rgba(255,255,255,0.94); line-height: 1.12; text-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.tile-badge {
+  position: absolute; right: 6px; top: 6px; width: 19px; height: 19px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font: 11px var(--mono);
+  background: rgba(13,14,18,0.6); border: 1.2px solid var(--ink-dim); color: var(--ink-dim);
+  backdrop-filter: blur(4px);
+}
+.tile-badge.local { color: var(--accent); border-color: var(--accent); }
+.tile-badge.offline { color: var(--warn); border-color: var(--warn); }
+.tile-num {
+  position: absolute; right: 6px; top: 6px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--accent); color: var(--on-accent); font-weight: 700; font-size: 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+.tile-wave { position: absolute; left: 7px; top: 7px; display: inline-flex; align-items: flex-end; gap: 1.5px; height: 12px; }
+.tile-wave span { width: 2px; background: var(--accent); border-radius: 1px; animation: wave 0.9s ease-in-out infinite; }
+.tile-wave span:nth-child(1){height:5px;animation-delay:0s}
+.tile-wave span:nth-child(2){height:11px;animation-delay:.15s}
+.tile-wave span:nth-child(3){height:4px;animation-delay:.3s}
+.tile-wave span:nth-child(4){height:9px;animation-delay:.45s}
+.tile-wave span:nth-child(5){height:7px;animation-delay:.6s}
+@keyframes wave { 0%,100%{transform:scaleY(0.5)} 50%{transform:scaleY(1)} }
+
+.empty-note { text-align: center; color: var(--ink-dim); font: 14px var(--mono); padding: 60px 20px; line-height: 1.7; }
+
+/* ── Mix tray ── */
+#mix-tray { display: none; margin: 0 12px 8px; padding: 13px 14px 14px; border-radius: 17px; border: 1.5px solid var(--accent); background: var(--bg-raised); flex: 0 0 auto; }
+#mix-tray.active { display: block; animation: slideUpFade .25s ease; }
+@keyframes slideUpFade { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+.tray-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tray-count { font-size: 16px; font-weight: 600; }
+.tray-summary { font: 11px var(--mono); color: var(--ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
+.tray-actions { display: flex; gap: 10px; margin-top: 11px; }
+.tray-actions button { flex: 1; padding: 11px 0; border-radius: 999px; font-size: 15px; font-weight: 600; }
+.tray-actions .outline { border: 1.5px solid var(--ink-dim); color: var(--ink); }
+.tray-actions .filled { background: var(--accent); color: var(--on-accent); }
+.tray-actions button:disabled { opacity: 0.4; }
+
+/* ── Mini bar ── */
+#mini { display: none; margin: 0 12px 10px; padding: 9px 11px; border-radius: var(--r-bar); border: 1.5px solid var(--ink-faint); background: var(--bg-raised); align-items: center; gap: 11px; flex: 0 0 auto; cursor: pointer; }
+#mini.active { display: flex; }
+.mini-art { width: 40px; height: 40px; border-radius: 9px; flex: 0 0 auto; background: oklch(0.42 0.07 var(--mini-hue, 248)); }
+.mini-info { flex: 1 1 auto; min-width: 0; }
+.mini-title { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini-sub { font: 10px var(--mono); color: var(--ink-dim); margin-top: 2px; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini-timer { font: 13px var(--mono); color: var(--accent); flex: 0 0 auto; }
+.mini-play { width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--ink); display: flex; align-items: center; justify-content: center; font-size: 13px; flex: 0 0 auto; }
+
+/* ── Now Playing ── */
+#now { display: none; position: absolute; inset: 0; z-index: 40; background: var(--bg); flex-direction: column; padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); }
+#now.active { display: flex; animation: npUp .3s ease-out; }
+@keyframes npUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.np-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px 4px; flex: 0 0 auto; }
+.np-header .center { font: 14px var(--mono); color: var(--ink-dim); }
+.np-iconbtn { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--ink); }
+.np-iconbtn.accent { color: var(--accent); }
+.np-body { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 22px; padding: 0 28px; min-height: 0; }
+.np-cover-wrap { position: relative; width: 280px; max-width: 78vw; aspect-ratio: 1/1; margin: 0 auto; }
+.np-cover { position: absolute; inset: 14px; border-radius: var(--r-sheet); background: oklch(0.42 0.07 var(--np-hue, 248)); display: flex; align-items: flex-end; padding: 18px; }
+.np-cover-title { font-size: 22px; font-weight: 700; color: rgba(255,255,255,0.95); text-shadow: 0 1px 6px rgba(0,0,0,0.4); }
+.np-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.np-ring circle { fill: none; }
+.np-ring .track { stroke: var(--ink-faint); stroke-width: 1.2; }
+.np-ring .arc { stroke: var(--accent); stroke-width: 1.6; stroke-linecap: round; transition: stroke-dashoffset .5s linear; }
+.np-meta { text-align: center; }
+.np-title { font-size: 27px; font-weight: 600; }
+.np-source { font: 12px var(--mono); color: var(--ink-dim); margin-top: 5px; }
+.np-scrub { display: flex; flex-direction: column; gap: 6px; }
+.scrub-track { height: 4px; border-radius: 2px; background: var(--ink-faint); position: relative; cursor: pointer; }
+.scrub-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 2px; width: 0; }
+.scrub-thumb { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 13px; height: 13px; border-radius: 50%; background: var(--accent); left: 0; }
+.scrub-times { display: flex; justify-content: space-between; font: 10px var(--mono); color: var(--ink-dim); }
+.np-transport { display: flex; align-items: center; justify-content: center; gap: 26px; }
+.np-transport button { font-size: 26px; color: var(--ink); display: flex; align-items: center; justify-content: center; }
+.np-transport .small { font-size: 22px; color: var(--ink-dim); }
+.np-transport .small.on { color: var(--accent); }
+.np-play { width: 68px; height: 68px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-size: 24px; }
+.np-vol { display: flex; align-items: center; gap: 12px; }
+.np-vol .vicon { font-size: 14px; color: var(--ink-dim); flex: 0 0 auto; }
+.np-vol-track { flex: 1; height: 4px; border-radius: 2px; background: var(--ink-faint); position: relative; cursor: pointer; }
+.np-vol-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ink); opacity: 0.7; border-radius: 2px; width: 55%; }
+.np-vol-thumb { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 12px; height: 12px; border-radius: 50%; background: var(--ink); left: 55%; }
+
+/* ── Sheet ── */
+#scrim { display: none; position: absolute; inset: 0; z-index: 50; background: rgba(13,14,18,0.72); }
+#scrim.active { display: block; }
+#sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 51; transform: translateY(100%); transition: transform .3s ease; background: var(--bg-raised); border-radius: var(--r-sheet) var(--r-sheet) 0 0; border-top: 1.5px solid var(--ink-faint); box-shadow: 0 -20px 50px rgba(0,0,0,0.5); padding: 14px 20px calc(26px + var(--safe-bottom)); }
+#sheet.active { transform: translateY(0); }
+.sheet-grab { width: 38px; height: 5px; border-radius: 3px; background: var(--ink-dim); margin: 0 auto 16px; }
+.sheet-title { font-size: 21px; font-weight: 600; margin-bottom: 3px; }
+.sheet-sub { font: 11px var(--mono); color: var(--ink-dim); margin-bottom: 16px; }
+.chips { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+.chip { padding: 9px 16px; border-radius: 999px; border: 1.5px solid var(--ink-dim); color: var(--ink); font-size: 15px; transition: all .15s; }
+.chip.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+.toggles { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; }
+.toggle-row span { font-size: 16px; }
+.switch { width: 46px; height: 28px; border-radius: 999px; background: var(--fill2); border: 1.5px solid var(--ink-dim); position: relative; transition: background .2s, border-color .2s; flex: 0 0 auto; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: var(--ink-dim); transition: transform .2s, background .2s; }
+.switch.on { background: var(--accent); border-color: var(--accent); }
+.switch.on::after { transform: translateX(18px); background: var(--on-accent); }
+.sheet-cta { width: 100%; text-align: center; padding: 15px 0; border-radius: var(--r-btn); background: var(--accent); color: var(--on-accent); font-size: 17px; font-weight: 700; }
+
+/* ── Loading / Toast ── */
+#loading { display: none; position: absolute; inset: 0; z-index: 80; background: var(--bg); flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+#loading.active { display: flex; }
+.spinner { width: 30px; height: 30px; border: 3px solid var(--fill2); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading .ltext { font: 12px var(--mono); color: var(--ink-dim); letter-spacing: 0.08em; }
+#toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + var(--safe-bottom)); z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+.toast { background: var(--bg-raised); border: 1.5px solid var(--accent-dim); color: var(--ink); padding: 11px 18px; border-radius: var(--r-btn); font-size: 13px; max-width: 80vw; text-align: center; animation: toastIn .25s ease; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- LOGIN -->
+  <div id="login">
+    <div class="brand"><span class="moon"></span><span class="wordmark">Snoozz</span></div>
+    <div class="login-sub">Sleep Music</div>
+
+    <form class="form" id="unlock-form" style="display:none" onsubmit="return false">
+      <input id="inp-unlock-pw" type="password" placeholder="Master password" autocomplete="current-password">
+      <div class="form-err" id="unlock-err"></div>
+      <button class="btn-primary" data-action="unlock">Unlock</button>
+      <button class="btn-text" data-action="full-login">Use different bucket</button>
+    </form>
+
+    <form class="form" id="login-form" onsubmit="return false">
+      <input id="inp-endpoint" placeholder="Endpoint (e.g. s3.wasabisys.com)">
+      <input id="inp-bucket" placeholder="Bucket name">
+      <div class="row">
+        <input id="inp-region" placeholder="Region (us-east-1)">
+      </div>
+      <input id="inp-access-key" placeholder="Access key" autocomplete="off">
+      <input id="inp-secret-key" type="password" placeholder="Secret key" autocomplete="off">
+      <input id="inp-master-pw" type="password" placeholder="Master password (encrypts keys on device)" autocomplete="new-password">
+      <div class="form-err" id="login-err"></div>
+      <button class="btn-primary" data-action="login">Connect</button>
+    </form>
+  </div>
+
+  <!-- HOME -->
+  <div id="home">
+    <div class="topbar" id="topbar-normal">
+      <div class="topbar-brand"><span class="moon"></span><span class="wordmark">Snoozz</span></div>
+      <button class="icon-btn" data-action="open-timer" title="Sleep timer">&#9201;</button>
+    </div>
+    <div id="topbar-select">
+      <button class="side left" data-action="cancel-select">Cancel</button>
+      <span class="center">Select tracks</span>
+      <button class="side right" data-action="clear-mix">Clear</button>
+    </div>
+
+    <div id="grid-scroll">
+      <div id="grid"></div>
+      <div class="empty-note" id="empty-note" style="display:none"></div>
+    </div>
+
+    <div id="mix-tray">
+      <div class="tray-head">
+        <span class="tray-count" id="tray-count">0 in your mix</span>
+        <span class="tray-summary" id="tray-summary"></span>
+      </div>
+      <div class="tray-actions">
+        <button class="outline" data-action="open-timer">Set timer</button>
+        <button class="filled" id="play-mix-btn" data-action="play-mix">Play mix &#9654;</button>
+      </div>
+    </div>
+
+    <div id="mini" data-action="expand">
+      <div class="mini-art" id="mini-art"></div>
+      <div class="mini-info">
+        <div class="mini-title" id="mini-title">—</div>
+        <div class="mini-sub" id="mini-sub"></div>
+      </div>
+      <span class="mini-timer" id="mini-timer"></span>
+      <button class="mini-play" id="mini-play" data-action="toggle-play" data-stop="1">&#9654;</button>
+    </div>
+  </div>
+
+  <!-- NOW PLAYING -->
+  <div id="now">
+    <div class="np-header">
+      <button class="np-iconbtn" data-action="collapse">&#8964;</button>
+      <span class="center" id="np-context">single track</span>
+      <button class="np-iconbtn" id="np-dl" data-action="toggle-download" title="Download for offline">&#8595;</button>
+    </div>
+    <div class="np-body">
+      <div class="np-cover-wrap">
+        <div class="np-cover" id="np-cover"><span class="np-cover-title" id="np-cover-title"></span></div>
+        <svg class="np-ring" id="np-ring" viewBox="0 0 100 100" style="display:none">
+          <circle class="track" cx="50" cy="50" r="48"></circle>
+          <circle class="arc" id="np-arc" cx="50" cy="50" r="48" stroke-dasharray="301.6" stroke-dashoffset="0"></circle>
+        </svg>
+      </div>
+      <div class="np-meta">
+        <div class="np-title" id="np-title">—</div>
+        <div class="np-source" id="np-source"></div>
+      </div>
+      <div class="np-scrub">
+        <div class="scrub-track" id="scrub-track">
+          <div class="scrub-fill" id="scrub-fill"></div>
+          <div class="scrub-thumb" id="scrub-thumb"></div>
+        </div>
+        <div class="scrub-times"><span id="time-cur">0:00</span><span id="time-tot">0:00</span></div>
+      </div>
+      <div class="np-transport">
+        <button class="small" data-action="extend" title="+5 min">&#10557;</button>
+        <button data-action="prev">&#9198;</button>
+        <button class="np-play" id="np-play" data-action="toggle-play">&#9654;</button>
+        <button data-action="next">&#9197;</button>
+        <button class="small" id="loop-btn" data-action="toggle-loop" title="Loop">&#10568;</button>
+      </div>
+      <div class="np-vol">
+        <span class="vicon">&#128265;</span>
+        <div class="np-vol-track" id="vol-track">
+          <div class="np-vol-fill" id="vol-fill"></div>
+          <div class="np-vol-thumb" id="vol-thumb"></div>
+        </div>
+        <span class="vicon">&#128266;</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHEET -->
+  <div id="scrim" data-action="close-sheet"></div>
+  <div id="sheet">
+    <div class="sheet-grab"></div>
+    <div class="sheet-title">Sleep timer</div>
+    <div class="sheet-sub">Mix loops, then fades out &amp; stops</div>
+    <div class="chips" id="chips"></div>
+    <div class="toggles">
+      <div class="toggle-row"><span>Fade out last 60s</span><div class="switch" id="tg-fade" data-toggle="fadeOut"></div></div>
+      <div class="toggle-row"><span>Shuffle order</span><div class="switch" id="tg-shuffle" data-toggle="shuffle"></div></div>
+      <div class="toggle-row"><span>Loop until timer ends</span><div class="switch" id="tg-loop" data-toggle="loop"></div></div>
+    </div>
+    <button class="sheet-cta" id="sheet-cta" data-action="start-timer">Start 30-min mix</button>
+  </div>
+
+  <!-- LOADING -->
+  <div id="loading"><div class="spinner"></div><div class="ltext" id="loading-text">Loading…</div></div>
+</div>
+<div id="toasts"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  Snoozz — Sleep Music Player (single-file PWA)
+//  Reuses Tome's S3 client, crypto, OPFS cache, Media Session, SW.
+// ══════════════════════════════════════════════════════════════
+(function () {
+'use strict';
+
+// ── Config ──
+const CFG = Object.freeze({
+  AUDIO_EXTS:      ['.mp3', '.aac', '.m4a', '.flac'],
+  URL_CACHE_TTL:   50 * 60 * 1000,
+  URL_CACHE_MAX:   500,
+  PBKDF2_ITER:     310_000,
+  FADE_WINDOW_MS:  60_000,      // fade over last 60s
+  FADE_STEP_MS:    200,
+  MAX_RETRIES:     3,
+  TOAST_MS:        3200,
+  PRESETS:         [15, 30, 45, 60, 90],
+  HUE_MIN:         15,
+  HUE_SPAN:        306,         // 15..321
+});
+
+// ── State ──
+const S = {
+  s3: null,
+  tracks: [], byId: {},
+  selectMode: false,
+  mix: [],                       // ordered track ids
+  queue: [], queueIdx: 0,        // track objects currently playing
+  loopMode: false,
+  playingId: null, isPlaying: false,
+  volume: 1, savedVolume: 1,
+  timer: { minutes: null, endTime: null, fadeWindowMs: CFG.FADE_WINDOW_MS, isRunning: false },
+  timerPrefs: { minutes: 30, fadeOut: true, shuffle: false, loop: true },
+  tickId: null, fadeId: null,
+  connectivity: navigator.onLine ? 'online' : 'offline',
+  urlCache: {}, objectUrls: new Set(),
+  positions: {},
+  expanded: false,
+  scrubDragging: false,
+};
+
+const $ = id => document.getElementById(id);
+const audio = new Audio();
+audio.preload = 'auto';
+let audioRetry = 0;
+
+// ══════════════════════════════════════════════════════════════
+//  Utilities
+// ══════════════════════════════════════════════════════════════
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function formatTime(s) {
+  if (!s || isNaN(s) || !isFinite(s)) return '0:00';
+  const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+function naturalSort(a, b) {
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+}
+function hashStr(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+function hueFor(id) { return CFG.HUE_MIN + (hashStr(id) % CFG.HUE_SPAN); }
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = (hashStr(a[i].id + i) ) % (i + 1);  // deterministic-ish, no Math.random needed
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function showLoading(t) { $('loading-text').textContent = t || 'Loading…'; $('loading').classList.add('active'); }
+function hideLoading() { $('loading').classList.remove('active'); }
+function toast(msg) {
+  const el = document.createElement('div');
+  el.className = 'toast'; el.textContent = msg;
+  $('toasts').appendChild(el);
+  setTimeout(() => { el.style.transition = 'opacity .3s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, CFG.TOAST_MS);
+}
+function createTrackedObjectUrl(blob) { const u = URL.createObjectURL(blob); S.objectUrls.add(u); return u; }
+function pruneUrlCache() {
+  const now = Date.now(), keys = Object.keys(S.urlCache);
+  if (keys.length <= CFG.URL_CACHE_MAX) return;
+  for (const k of keys) if (S.urlCache[k].expires < now) delete S.urlCache[k];
+  const rem = Object.entries(S.urlCache).sort((a, b) => a[1].expires - b[1].expires);
+  while (rem.length > CFG.URL_CACHE_MAX) delete S.urlCache[rem.shift()[0]];
+}
+
+// ══════════════════════════════════════════════════════════════
+//  AES-GCM credential encryption (ported from Tome)
+// ══════════════════════════════════════════════════════════════
+const Crypto = {
+  async deriveKey(password, salt) {
+    const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: CFG.PBKDF2_ITER, hash: 'SHA-256' },
+      material, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  },
+  async encrypt(password, data) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await this.deriveKey(password, salt);
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(data)));
+    return { salt: btoa(String.fromCharCode(...salt)), iv: btoa(String.fromCharCode(...iv)), ct: btoa(String.fromCharCode(...new Uint8Array(ct))) };
+  },
+  async decrypt(password, env) {
+    const salt = Uint8Array.from(atob(env.salt), c => c.charCodeAt(0));
+    const iv = Uint8Array.from(atob(env.iv), c => c.charCodeAt(0));
+    const ct = Uint8Array.from(atob(env.ct), c => c.charCodeAt(0));
+    const key = await this.deriveKey(password, salt);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    return JSON.parse(new TextDecoder().decode(pt));
+  },
+};
+
+// ══════════════════════════════════════════════════════════════
+//  AWS Signature V4 — pure-browser S3 client (ported from Tome)
+// ══════════════════════════════════════════════════════════════
+class S3Client {
+  constructor({ endpoint, bucket, region, accessKey, secretKey }) {
+    let ep = endpoint.replace(/\/$/, '').trim();
+    if (!/^https?:\/\//i.test(ep)) ep = 'https://' + ep;
+    this.endpoint = ep; this.bucket = bucket; this.region = region || 'us-east-1';
+    this.accessKey = accessKey; this.secretKey = secretKey;
+    this.pathStyle = !ep.includes('.amazonaws.com');
+  }
+  _buildUrl(objectPath) {
+    if (this.pathStyle) {
+      const fullPath = ('/' + this.bucket + objectPath).replace(/\/\//g, '/');
+      const url = new URL(fullPath, this.endpoint);
+      return { url, canonicalPath: url.pathname };
+    }
+    const parsed = new URL(this.endpoint);
+    const url = new URL(objectPath, `${parsed.protocol}//${this.bucket}.${parsed.host}`);
+    return { url, canonicalPath: url.pathname };
+  }
+  async _sha256(data) {
+    if (typeof data === 'string') data = new TextEncoder().encode(data);
+    const h = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(h)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  async _hmac(key, msg) {
+    if (typeof key === 'string') key = new TextEncoder().encode(key);
+    if (typeof msg === 'string') msg = new TextEncoder().encode(msg);
+    const ck = await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    return new Uint8Array(await crypto.subtle.sign('HMAC', ck, msg));
+  }
+  async _signingKey(dateStamp) {
+    let k = await this._hmac(new TextEncoder().encode('AWS4' + this.secretKey), dateStamp);
+    k = await this._hmac(k, this.region); k = await this._hmac(k, 's3');
+    return this._hmac(k, 'aws4_request');
+  }
+  _amzDate() { return new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z'); }
+  _uriEncode(str, encodeSlash = true) {
+    let out = '';
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (/[A-Za-z0-9_\-~.]/.test(ch)) { out += ch; continue; }
+      if (ch === '/' && !encodeSlash) { out += ch; continue; }
+      for (const b of new TextEncoder().encode(ch)) out += '%' + b.toString(16).toUpperCase().padStart(2, '0');
+    }
+    return out;
+  }
+  async signedRequest(method, path, { query = {}, headers = {}, body = '' } = {}) {
+    const amzDate = this._amzDate(), dateStamp = amzDate.slice(0, 8);
+    const scope = `${dateStamp}/${this.region}/s3/aws4_request`;
+    const encodedPath = this._uriEncode(path, false);
+    const { url, canonicalPath } = this._buildUrl(encodedPath);
+    const qEntries = Object.entries(query).sort((a, b) => a[0].localeCompare(b[0]));
+    const canonQuery = qEntries.map(([k, v]) => this._uriEncode(k) + '=' + this._uriEncode(v)).join('&');
+    const requestUrl = url.origin + url.pathname + (canonQuery ? '?' + canonQuery : '');
+    const bodyBytes = (body instanceof Uint8Array) ? body : (body || '');
+    const payloadHash = await this._sha256(bodyBytes);
+    const allHeaders = { host: url.host, 'x-amz-content-sha256': payloadHash, 'x-amz-date': amzDate, ...headers };
+    if (body && method === 'PUT') allHeaders['content-type'] = headers['content-type'] || 'application/octet-stream';
+    const signedKeys = Object.keys(allHeaders).sort();
+    const signedHeadersStr = signedKeys.join(';');
+    const canonHeaders = signedKeys.map(k => `${k}:${allHeaders[k]}\n`).join('');
+    const canonReq = [method, canonicalPath, canonQuery, canonHeaders, signedHeadersStr, payloadHash].join('\n');
+    const strToSign = ['AWS4-HMAC-SHA256', amzDate, scope, await this._sha256(canonReq)].join('\n');
+    const sigKey = await this._signingKey(dateStamp);
+    const sig = Array.from(await this._hmac(sigKey, strToSign)).map(b => b.toString(16).padStart(2, '0')).join('');
+    allHeaders['Authorization'] = `AWS4-HMAC-SHA256 Credential=${this.accessKey}/${scope}, SignedHeaders=${signedHeadersStr}, Signature=${sig}`;
+    delete allHeaders.host;
+    const fetchBody = (method === 'GET' || method === 'HEAD') ? undefined : (bodyBytes || undefined);
+    return fetch(requestUrl, { method, headers: allHeaders, body: fetchBody });
+  }
+  async listObjects(prefix = '', delimiter = '/') {
+    const results = []; let token = null;
+    do {
+      const q = { 'list-type': '2', prefix, delimiter, 'max-keys': '1000' };
+      if (token) q['continuation-token'] = token;
+      const resp = await this.signedRequest('GET', '/', { query: q });
+      if (!resp.ok) { const err = await resp.text().catch(() => ''); throw new Error(`ListObjects ${resp.status} — ${err.slice(0, 200)}`); }
+      const xml = new DOMParser().parseFromString(await resp.text(), 'text/xml');
+      if (xml.querySelector('parsererror')) break;
+      for (const c of xml.getElementsByTagName('Contents')) {
+        const keyEl = c.getElementsByTagName('Key')[0], sizeEl = c.getElementsByTagName('Size')[0];
+        if (keyEl) results.push({ type: 'file', key: keyEl.textContent, size: sizeEl ? parseInt(sizeEl.textContent) : 0 });
+      }
+      for (const cp of xml.getElementsByTagName('CommonPrefixes')) {
+        const pEl = cp.getElementsByTagName('Prefix')[0];
+        if (pEl) results.push({ type: 'prefix', key: pEl.textContent });
+      }
+      const truncEl = xml.getElementsByTagName('IsTruncated')[0];
+      token = (truncEl && truncEl.textContent === 'true') ? (xml.getElementsByTagName('NextContinuationToken')[0]?.textContent || null) : null;
+    } while (token);
+    return results;
+  }
+  async getJSON(key) { try { const r = await this.signedRequest('GET', '/' + key); return r.ok ? await r.json() : null; } catch { return null; } }
+  async getSignedUrl(key, ttlSec = 3600) {
+    if (S.urlCache[key] && S.urlCache[key].expires > Date.now()) return S.urlCache[key].url;
+    const amzDate = this._amzDate(), dateStamp = amzDate.slice(0, 8);
+    const scope = `${dateStamp}/${this.region}/s3/aws4_request`;
+    const encodedPath = this._uriEncode('/' + key, false);
+    const { url } = this._buildUrl(encodedPath);
+    const canonicalPath = url.pathname;
+    const params = {
+      'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
+      'X-Amz-Credential': `${this.accessKey}/${scope}`,
+      'X-Amz-Date': amzDate, 'X-Amz-Expires': String(ttlSec), 'X-Amz-SignedHeaders': 'host',
+    };
+    const sorted = Object.entries(params).sort((a, b) => a[0].localeCompare(b[0]));
+    const canonQuery = sorted.map(([k, v]) => this._uriEncode(k) + '=' + this._uriEncode(v)).join('&');
+    const canonReq = ['GET', canonicalPath, canonQuery, `host:${url.host}\n`, 'host', 'UNSIGNED-PAYLOAD'].join('\n');
+    const strToSign = ['AWS4-HMAC-SHA256', amzDate, scope, await this._sha256(canonReq)].join('\n');
+    const sigKey = await this._signingKey(dateStamp);
+    const sig = Array.from(await this._hmac(sigKey, strToSign)).map(b => b.toString(16).padStart(2, '0')).join('');
+    const signed = url.origin + url.pathname + '?' + canonQuery + '&X-Amz-Signature=' + sig;
+    S.urlCache[key] = { url: signed, expires: Date.now() + CFG.URL_CACHE_TTL };
+    pruneUrlCache();
+    return signed;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Library crawl (flat track list)
+// ══════════════════════════════════════════════════════════════
+function isAudioFile(key) { const l = key.toLowerCase(); return CFG.AUDIO_EXTS.some(e => l.endsWith(e)); }
+
+async function crawlTracks() {
+  showLoading('Scanning sounds…');
+  const files = [], visited = new Set();
+  async function walk(prefix) {
+    if (visited.has(prefix)) return;
+    visited.add(prefix);
+    let items;
+    try { items = await S.s3.listObjects(prefix, '/'); }
+    catch (e) { console.warn('crawl', prefix, e.message); return; }
+    for (const it of items) {
+      if (it.type === 'file') files.push(it);
+      else if (it.type === 'prefix') await walk(it.key);
+    }
+  }
+  await walk('');
+
+  let meta = null;
+  if (files.some(f => f.key.toLowerCase() === 'metadata.json')) meta = await S.s3.getJSON('metadata.json');
+  const lookup = (key) => {
+    if (!meta) return {};
+    if (Array.isArray(meta)) return meta.find(m => m.key === key) || {};
+    if (meta.tracks && meta.tracks[key]) return meta.tracks[key];
+    return meta[key] || {};
+  };
+
+  const audioFiles = files.filter(f => isAudioFile(f.key));
+  S.tracks = audioFiles.map(f => {
+    const base = f.key.split('/').pop().replace(/\.[^.]+$/, '');
+    const m = lookup(f.key) || {};
+    return {
+      id: f.key, key: f.key, name: f.key.split('/').pop(), size: f.size,
+      title: m.title || base,
+      hue: (m.hue != null) ? m.hue : hueFor(f.key),
+      duration: m.duration || null,
+      cached: false,
+    };
+  }).sort((a, b) => naturalSort(a.title, b.title));
+
+  S.byId = {};
+  for (const t of S.tracks) S.byId[t.id] = t;
+
+  hideLoading();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  OPFS offline cache (adapted from Tome — per-track)
+// ══════════════════════════════════════════════════════════════
+function trackDirName(t) { return 'snoozz-' + hashStr(t.id).toString(36); }
+
+async function detectCached() {
+  if (!navigator.storage?.getDirectory) return;
+  try {
+    const root = await navigator.storage.getDirectory();
+    for (const t of S.tracks) {
+      try { await root.getDirectoryHandle(trackDirName(t), { create: false }); t.cached = true; }
+      catch { t.cached = false; }
+    }
+  } catch { /* OPFS unavailable */ }
+}
+
+async function downloadTrack(t) {
+  if (!navigator.onLine) { toast('No network — cannot download'); return false; }
+  if (navigator.storage?.persist) { try { await navigator.storage.persist(); } catch {} }
+  toast('Downloading ' + t.title + '…');
+  try {
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle(trackDirName(t), { create: true });
+    const url = await S.s3.getSignedUrl(t.key);
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const blob = await resp.blob();
+    const fh = await dir.getFileHandle(t.name, { create: true });
+    const wr = await fh.createWritable();
+    await wr.write(blob); await wr.close();
+    t.cached = true;
+    toast(`Saved offline (${(blob.size / 1048576).toFixed(1)} MB)`);
+    return true;
+  } catch (e) {
+    console.error('download', e);
+    try { const root = await navigator.storage.getDirectory(); await root.removeEntry(trackDirName(t), { recursive: true }); } catch {}
+    t.cached = false;
+    toast('Download failed: ' + e.message);
+    return false;
+  }
+}
+
+async function removeCached(t) {
+  try { const root = await navigator.storage.getDirectory(); await root.removeEntry(trackDirName(t), { recursive: true }); } catch {}
+  t.cached = false;
+}
+
+async function openCachedFile(t) {
+  const root = await navigator.storage.getDirectory();
+  const dir = await root.getDirectoryHandle(trackDirName(t), { create: false });
+  const fh = await dir.getFileHandle(t.name, { create: false });
+  return fh.getFile();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Audio engine
+// ══════════════════════════════════════════════════════════════
+function isPlayable(t) { return t.cached || S.connectivity === 'online'; }
+function badgeKind(t) { return t.cached ? 'local' : (S.connectivity === 'offline' ? 'offline' : 'cloud'); }
+
+async function getTrackUrl(t) {
+  if (t.cached) { try { return createTrackedObjectUrl(await openCachedFile(t)); } catch { /* fall through */ } }
+  return S.s3.getSignedUrl(t.key);
+}
+
+async function loadAndPlay(idx, autoplay) {
+  const t = S.queue[idx];
+  if (!t) return;
+  S.queueIdx = idx; S.playingId = t.id;
+  audioRetry = 0;
+  const url = await getTrackUrl(t);
+  if (!url) { toast('Cannot load track'); return; }
+  audio.src = url;
+  audio.volume = S.volume;
+  audio.load();
+  if (autoplay) { try { await audio.play(); S.isPlaying = true; } catch (e) { S.isPlaying = false; } }
+  updateAllUI();
+  updateMediaSession();
+}
+
+async function startQueue(trackObjs, { loop = true, timerMinutes = null } = {}) {
+  if (!trackObjs.length) return;
+  S.queue = (S.timerPrefs.shuffle && timerMinutes && trackObjs.length > 1) ? shuffle(trackObjs) : trackObjs.slice();
+  S.loopMode = loop;
+  audio.volume = S.volume;
+  await loadAndPlay(0, true);
+  if (timerMinutes) startTimer(timerMinutes); else clearTimer();
+  showMini();
+  if (S.expanded) renderNowPlaying();
+  renderGrid();
+}
+
+function playSingle(t) {
+  if (!isPlayable(t)) { toast('Offline — open it and tap ↓ to download'); return; }
+  startQueue([t], { loop: true, timerMinutes: null });
+}
+
+function handleEnded() {
+  let next = S.queueIdx + 1;
+  if (next >= S.queue.length) {
+    if (!S.loopMode) { stopPlayback(); return; }
+    if (S.timerPrefs.shuffle && S.queue.length > 1) S.queue = shuffle(S.queue);
+    next = 0;
+  }
+  loadAndPlay(next, true);
+}
+
+function togglePlay() {
+  if (!S.queue.length) return;
+  if (audio.paused) { audio.play().then(() => { S.isPlaying = true; updateAllUI(); }).catch(() => {}); }
+  else { audio.pause(); S.isPlaying = false; updateAllUI(); savePersist(); }
+}
+
+function stopPlayback() {
+  audio.pause();
+  S.isPlaying = false;
+  clearTimer();
+  updateAllUI();
+  savePersist();
+}
+
+function nextTrack() {
+  if (!S.queue.length) return;
+  let n = S.queueIdx + 1; if (n >= S.queue.length) n = 0;
+  loadAndPlay(n, true);
+}
+function prevTrack() {
+  if (!S.queue.length) return;
+  if (audio.currentTime > 3) { audio.currentTime = 0; return; }
+  let p = S.queueIdx - 1; if (p < 0) p = S.queue.length - 1;
+  loadAndPlay(p, true);
+}
+
+// audio events
+audio.addEventListener('ended', handleEnded);
+audio.addEventListener('play', () => { S.isPlaying = true; updatePlayIcons(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
+audio.addEventListener('pause', () => { if (!S.timer.isRunning || audio.currentTime) updatePlayIcons(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
+audio.addEventListener('timeupdate', () => { if (!S.scrubDragging) updateScrubber(); });
+audio.addEventListener('playing', () => { audioRetry = 0; });
+audio.addEventListener('error', async () => {
+  const t = S.queue[S.queueIdx];
+  if (!t || t.cached || audioRetry >= CFG.MAX_RETRIES) return;
+  audioRetry++;
+  delete S.urlCache[t.key];
+  try {
+    const url = await S.s3.getSignedUrl(t.key);
+    audio.src = url; audio.load();
+    if (S.isPlaying) audio.play().catch(() => {});
+  } catch {}
+});
+
+// ══════════════════════════════════════════════════════════════
+//  Sleep timer
+// ══════════════════════════════════════════════════════════════
+function startTimer(minutes) {
+  clearTimer();
+  S.timer.minutes = minutes;
+  S.timer.endTime = Date.now() + minutes * 60000;
+  S.timer.fadeWindowMs = S.timerPrefs.fadeOut ? Math.min(CFG.FADE_WINDOW_MS, minutes * 60000) : 0;
+  S.timer.isRunning = true;
+  S.tickId = setInterval(tickTimer, 250);
+  tickTimer();
+}
+function clearTimer() {
+  if (S.tickId) { clearInterval(S.tickId); S.tickId = null; }
+  if (S.fadeId) { clearInterval(S.fadeId); S.fadeId = null; }
+  S.timer.isRunning = false; S.timer.endTime = null; S.timer.minutes = null;
+  $('np-ring').style.display = 'none';
+}
+function tickTimer() {
+  if (!S.timer.endTime) return;
+  const rem = S.timer.endTime - Date.now();
+  updateTimerUI(rem);
+  if (S.timer.fadeWindowMs && rem <= S.timer.fadeWindowMs && rem > 0 && !S.fadeId) startFade(rem);
+  if (rem <= 0) finishTimer();
+}
+function startFade(remMs) {
+  const startVol = S.volume, t0 = Date.now();
+  S.fadeId = setInterval(() => {
+    const frac = Math.min(1, (Date.now() - t0) / remMs);
+    audio.volume = Math.max(0, startVol * (1 - frac));
+    if (frac >= 1) { clearInterval(S.fadeId); S.fadeId = null; }
+  }, CFG.FADE_STEP_MS);
+}
+function finishTimer() {
+  audio.pause();
+  audio.volume = S.volume;
+  S.isPlaying = false;
+  clearTimer();
+  updateAllUI();
+  toast('Sleep timer ended');
+  savePersist();
+}
+function extendTimer() {
+  if (!S.timer.isRunning) { toast('No timer running'); return; }
+  if (S.fadeId) { clearInterval(S.fadeId); S.fadeId = null; audio.volume = S.volume; }
+  S.timer.endTime += 5 * 60000;
+  toast('+5 minutes');
+  tickTimer();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Select mode + mix
+// ══════════════════════════════════════════════════════════════
+function enterSelectMode(firstId) {
+  S.selectMode = true;
+  S.mix = [];
+  if (firstId) S.mix.push(firstId);
+  $('topbar-normal').style.display = 'none';
+  $('topbar-select').classList.add('active');
+  if (navigator.vibrate) navigator.vibrate(8);
+  renderGrid(); updateTray();
+}
+function exitSelectMode() {
+  S.selectMode = false; S.mix = [];
+  $('topbar-normal').style.display = 'flex';
+  $('topbar-select').classList.remove('active');
+  $('mix-tray').classList.remove('active');
+  renderGrid();
+}
+function toggleSelect(id) {
+  const i = S.mix.indexOf(id);
+  if (i >= 0) S.mix.splice(i, 1); else S.mix.push(id);
+  renderGrid(); updateTray();
+}
+function clearMix() { S.mix = []; renderGrid(); updateTray(); }
+
+function updateTray() {
+  const tray = $('mix-tray');
+  if (S.selectMode && S.mix.length) {
+    tray.classList.add('active');
+    $('tray-count').textContent = `${S.mix.length} in your mix`;
+    $('tray-summary').textContent = S.mix.map(id => S.byId[id]?.title).filter(Boolean).join(' · ');
+    $('play-mix-btn').disabled = S.mix.length < 1;
+  } else {
+    tray.classList.remove('active');
+  }
+}
+function playMix() {
+  const tracks = S.mix.map(id => S.byId[id]).filter(t => t && isPlayable(t));
+  if (!tracks.length) { toast('No playable tracks selected'); return; }
+  const ids = S.mix.slice();
+  exitSelectMode();
+  S.mix = ids; // keep for persistence
+  startQueue(tracks, { loop: true, timerMinutes: null });
+  savePersist();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Sleep-timer sheet
+// ══════════════════════════════════════════════════════════════
+function renderChips() {
+  const wrap = $('chips');
+  wrap.innerHTML = '';
+  CFG.PRESETS.forEach(p => {
+    const c = document.createElement('button');
+    c.className = 'chip' + (p === S.timerPrefs.minutes ? ' active' : '');
+    c.textContent = p + ' min';
+    c.dataset.preset = p;
+    wrap.appendChild(c);
+  });
+  const custom = document.createElement('button');
+  custom.className = 'chip' + (CFG.PRESETS.includes(S.timerPrefs.minutes) ? '' : ' active');
+  custom.textContent = CFG.PRESETS.includes(S.timerPrefs.minutes) ? 'Custom…' : `${S.timerPrefs.minutes} min`;
+  custom.dataset.custom = '1';
+  wrap.appendChild(custom);
+}
+function syncToggles() {
+  $('tg-fade').classList.toggle('on', S.timerPrefs.fadeOut);
+  $('tg-shuffle').classList.toggle('on', S.timerPrefs.shuffle);
+  $('tg-loop').classList.toggle('on', S.timerPrefs.loop);
+}
+function updateSheetCta() { $('sheet-cta').textContent = `Start ${S.timerPrefs.minutes}-min mix`; }
+function openSheet() {
+  if (!S.selectMode && !S.queue.length) { toast('Tap a sound, or long-press to build a mix'); return; }
+  renderChips(); syncToggles(); updateSheetCta();
+  $('scrim').classList.add('active');
+  $('sheet').classList.add('active');
+}
+function closeSheet() { $('scrim').classList.remove('active'); $('sheet').classList.remove('active'); }
+function startTimerFromSheet() {
+  const mins = S.timerPrefs.minutes;
+  closeSheet();
+  savePersist();
+  if (S.selectMode) {
+    const tracks = S.mix.map(id => S.byId[id]).filter(t => t && isPlayable(t));
+    if (!tracks.length) { toast('No playable tracks selected'); return; }
+    const ids = S.mix.slice();
+    exitSelectMode();
+    S.mix = ids;
+    startQueue(tracks, { loop: S.timerPrefs.loop, timerMinutes: mins });
+  } else if (S.queue.length) {
+    S.loopMode = S.timerPrefs.loop;
+    startTimer(mins);
+    if (audio.paused) togglePlay();
+    updateAllUI();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Rendering
+// ══════════════════════════════════════════════════════════════
+function renderGrid() {
+  const grid = $('grid');
+  if (!S.tracks.length) {
+    grid.innerHTML = '';
+    const note = $('empty-note');
+    note.style.display = 'block';
+    note.textContent = 'No sounds found in this bucket.\nUpload mp3 / aac / m4a / flac files to get started.';
+    return;
+  }
+  $('empty-note').style.display = 'none';
+  const html = S.tracks.map(t => {
+    const sel = S.selectMode && S.mix.includes(t.id);
+    const selIdx = sel ? S.mix.indexOf(t.id) + 1 : 0;
+    const playing = t.id === S.playingId && S.isPlaying;
+    const dim = S.selectMode && !sel;
+    const disabled = !isPlayable(t);
+    const kind = badgeKind(t);
+    const glyph = kind === 'local' ? '&#8595;' : kind === 'offline' ? '&#9888;' : '&#9729;';
+    let corner;
+    if (sel) corner = `<span class="tile-num">${selIdx}</span>`;
+    else corner = `<span class="tile-badge ${kind}">${glyph}</span>`;
+    const wave = playing ? '<span class="tile-wave"><span></span><span></span><span></span><span></span><span></span></span>' : '';
+    return `<div class="tile${sel ? ' selected' : ''}${playing ? ' playing' : ''}${dim ? ' dim' : ''}${disabled ? ' disabled' : ''}" data-id="${escHtml(t.id)}" style="--hue:${t.hue}">
+      <div class="block">${wave}${corner}<span class="tile-title">${escHtml(t.title)}</span></div>
+    </div>`;
+  }).join('');
+  grid.innerHTML = html;
+}
+
+function showMini() { $('mini').classList.add('active'); updateMini(); }
+function currentTrack() { return S.queue[S.queueIdx] || null; }
+
+function modeLabel() {
+  if (S.queue.length > 1) return `${S.timer.minutes ? S.timer.minutes + '-min ' : ''}mix · ${S.queueIdx + 1} of ${S.queue.length}`;
+  return 'single track';
+}
+function sourceWord(t) { return t && t.cached ? 'Local' : 'Stream'; }
+
+function updateMini() {
+  const t = currentTrack();
+  if (!t) { $('mini').classList.remove('active'); return; }
+  $('mini-art').style.setProperty('--mini-hue', t.hue);
+  $('mini-title').textContent = t.title;
+  let sub = sourceWord(t) + ' · ';
+  sub += S.queue.length > 1 ? (S.timer.minutes ? `${S.timer.minutes}-min mix` : 'mix') : 'single track';
+  $('mini-sub').textContent = sub;
+}
+
+function updatePlayIcons() {
+  const icon = S.isPlaying ? '&#10074;&#10074;' : '&#9654;';
+  $('mini-play').innerHTML = icon;
+  $('np-play').innerHTML = icon;
+}
+
+function updateTimerUI(rem) {
+  rem = rem == null ? (S.timer.endTime ? S.timer.endTime - Date.now() : 0) : rem;
+  if (!S.timer.isRunning) {
+    $('mini-timer').textContent = '';
+    $('np-ring').style.display = 'none';
+    return;
+  }
+  const secs = Math.max(0, Math.ceil(rem / 1000));
+  const txt = formatTime(secs);
+  $('mini-timer').textContent = txt;
+  // now-playing ring + source line
+  $('np-ring').style.display = 'block';
+  const total = S.timer.minutes * 60000;
+  const frac = Math.max(0, Math.min(1, rem / total));
+  const circ = 2 * Math.PI * 48; // 301.6
+  $('np-arc').setAttribute('stroke-dasharray', circ.toFixed(1));
+  $('np-arc').setAttribute('stroke-dashoffset', (circ * (1 - frac)).toFixed(1));
+  const t = currentTrack();
+  if (t && S.expanded) {
+    const g = t.cached ? '&#8595;' : (S.connectivity === 'offline' ? '&#9888;' : '&#9729;');
+    $('np-source').innerHTML = `${sourceWord(t)} · ${g} &nbsp; fades out in ${txt}`;
+  }
+}
+
+function renderNowPlaying() {
+  const t = currentTrack();
+  if (!t) return;
+  $('np-context').textContent = modeLabel();
+  $('np-cover').style.setProperty('--np-hue', t.hue);
+  $('np-cover-title').textContent = t.title;
+  $('np-title').textContent = t.title;
+  const g = t.cached ? '&#8595;' : (S.connectivity === 'offline' ? '&#9888;' : '&#9729;');
+  if (S.timer.isRunning) updateTimerUI();
+  else $('np-source').innerHTML = `${sourceWord(t)} · ${g}`;
+  $('np-dl').classList.toggle('accent', t.cached);
+  $('loop-btn').classList.toggle('on', S.loopMode);
+  updateScrubber();
+  updateVolUI();
+  updatePlayIcons();
+}
+
+function updateScrubber() {
+  if (!S.expanded) return;
+  const cur = audio.currentTime || 0, dur = audio.duration || 0;
+  const pct = dur ? (cur / dur) * 100 : 0;
+  $('scrub-fill').style.width = pct + '%';
+  $('scrub-thumb').style.left = pct + '%';
+  $('time-cur').textContent = formatTime(cur);
+  $('time-tot').textContent = formatTime(dur);
+}
+function updateVolUI() {
+  const pct = Math.round(S.volume * 100);
+  $('vol-fill').style.width = pct + '%';
+  $('vol-thumb').style.left = pct + '%';
+}
+function updateAllUI() {
+  renderGrid();
+  updateMini();
+  updatePlayIcons();
+  updateTimerUI();
+  if (S.expanded) renderNowPlaying();
+}
+
+function expandNow() {
+  if (!S.queue.length) return;
+  S.expanded = true;
+  renderNowPlaying();
+  $('now').classList.add('active');
+}
+function collapseNow() { S.expanded = false; $('now').classList.remove('active'); }
+
+// ══════════════════════════════════════════════════════════════
+//  Media Session
+// ══════════════════════════════════════════════════════════════
+function updateMediaSession() {
+  if (!('mediaSession' in navigator)) return;
+  const t = currentTrack(); if (!t) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: t.title, artist: 'Snoozz',
+      album: S.queue.length > 1 ? 'Sleep mix' : 'Sleep music',
+    });
+    navigator.mediaSession.setActionHandler('play', () => togglePlay());
+    navigator.mediaSession.setActionHandler('pause', () => togglePlay());
+    navigator.mediaSession.setActionHandler('previoustrack', () => prevTrack());
+    navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
+  } catch {}
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Persistence
+// ══════════════════════════════════════════════════════════════
+function savePersist() {
+  try {
+    localStorage.setItem('snoozz_state', JSON.stringify({
+      mix: S.mix, timerPrefs: S.timerPrefs, volume: S.volume,
+      lastTrackId: S.playingId, lastQueue: S.queue.map(t => t.id),
+    }));
+  } catch {}
+}
+function loadPersist() {
+  try {
+    const raw = localStorage.getItem('snoozz_state');
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (typeof d.volume === 'number') { S.volume = d.volume; S.savedVolume = d.volume; audio.volume = d.volume; }
+    if (d.timerPrefs) S.timerPrefs = { ...S.timerPrefs, ...d.timerPrefs };
+    if (Array.isArray(d.mix)) S._restoredMix = d.mix;
+  } catch {}
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Login / session
+// ══════════════════════════════════════════════════════════════
+async function handleLogin() {
+  const endpoint = $('inp-endpoint').value.trim();
+  const bucket = $('inp-bucket').value.trim();
+  const region = $('inp-region').value.trim() || 'us-east-1';
+  const accessKey = $('inp-access-key').value.trim();
+  const secretKey = $('inp-secret-key').value.trim();
+  const masterPw = $('inp-master-pw').value;
+  const err = $('login-err'); err.textContent = '';
+  if (!endpoint || !bucket || !accessKey || !secretKey || !masterPw) { err.textContent = 'All fields are required'; return; }
+  try {
+    S.s3 = new S3Client({ endpoint, bucket, region, accessKey, secretKey });
+    showLoading('Connecting…');
+    await S.s3.listObjects('', '/');
+  } catch (e) {
+    hideLoading();
+    const m = e.message || '';
+    err.textContent = m.includes('Failed to fetch') ? 'Network/CORS error — check endpoint & bucket CORS'
+      : m.includes('403') ? 'Access denied (403) — check keys & permissions'
+      : m.includes('404') ? 'Bucket not found (404) — check name & region'
+      : m.includes('SignatureDoesNotMatch') ? 'Signature mismatch — check secret key'
+      : 'Connection failed: ' + m.slice(0, 80);
+    return;
+  }
+  try {
+    const env = await Crypto.encrypt(masterPw, { endpoint, bucket, region, accessKey, secretKey });
+    localStorage.setItem('snoozz_creds', JSON.stringify(env));
+  } catch { hideLoading(); err.textContent = 'Encryption error'; return; }
+  await bootApp();
+}
+
+async function handleUnlock() {
+  const pw = $('inp-unlock-pw').value;
+  const err = $('unlock-err'); err.textContent = '';
+  if (!pw) { err.textContent = 'Password required'; return; }
+  const stored = localStorage.getItem('snoozz_creds');
+  if (!stored) { showFullLogin(); return; }
+  try {
+    const creds = await Crypto.decrypt(pw, JSON.parse(stored));
+    S.s3 = new S3Client(creds);
+    showLoading('Connecting…');
+    await S.s3.listObjects('', '/');
+    await bootApp();
+  } catch { hideLoading(); err.textContent = 'Incorrect password or connection failed'; }
+}
+
+function showFullLogin() { $('unlock-form').style.display = 'none'; $('login-form').style.display = ''; localStorage.removeItem('snoozz_creds'); }
+function showUnlockForm() { $('login-form').style.display = 'none'; $('unlock-form').style.display = ''; setTimeout(() => $('inp-unlock-pw').focus(), 100); }
+
+async function bootApp() {
+  loadPersist();
+  $('login').classList.remove('active');
+  $('home').classList.add('active');
+  await crawlTracks();
+  await detectCached();
+  // restore mix selection (just remembers ids; user re-enters select to use)
+  if (S._restoredMix) S.mix = S._restoredMix.filter(id => S.byId[id]);
+  renderGrid();
+  updateVolUI();
+  hideLoading();
+  if (S.tracks.length) toast(`${S.tracks.length} sound${S.tracks.length !== 1 ? 's' : ''} ready`);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Now-playing download toggle
+// ══════════════════════════════════════════════════════════════
+async function toggleDownload() {
+  const t = currentTrack(); if (!t) return;
+  if (t.cached) { await removeCached(t); toast('Removed offline copy'); }
+  else { await downloadTrack(t); }
+  if (S.expanded) renderNowPlaying();
+  renderGrid();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Slider drag helpers
+// ══════════════════════════════════════════════════════════════
+function bindSlider(trackEl, onSet, opts = {}) {
+  function pct(e) {
+    const r = trackEl.getBoundingClientRect();
+    const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+    return Math.max(0, Math.min(1, x / r.width));
+  }
+  let dragging = false;
+  function down(e) { dragging = true; if (opts.onStart) opts.onStart(); onSet(pct(e)); e.preventDefault(); }
+  function move(e) { if (dragging) onSet(pct(e)); }
+  function up(e) { if (dragging) { dragging = false; if (opts.onEnd) opts.onEnd(pct(e)); } }
+  trackEl.addEventListener('mousedown', down); trackEl.addEventListener('touchstart', down, { passive: false });
+  window.addEventListener('mousemove', move); window.addEventListener('touchmove', move, { passive: false });
+  window.addEventListener('mouseup', up); window.addEventListener('touchend', up);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Event binding
+// ══════════════════════════════════════════════════════════════
+const actions = {
+  'login': handleLogin,
+  'unlock': handleUnlock,
+  'full-login': showFullLogin,
+  'open-timer': openSheet,
+  'close-sheet': closeSheet,
+  'start-timer': startTimerFromSheet,
+  'cancel-select': exitSelectMode,
+  'clear-mix': clearMix,
+  'play-mix': playMix,
+  'expand': expandNow,
+  'collapse': collapseNow,
+  'toggle-play': togglePlay,
+  'prev': prevTrack,
+  'next': nextTrack,
+  'extend': extendTimer,
+  'toggle-loop': () => { S.loopMode = !S.loopMode; $('loop-btn').classList.toggle('on', S.loopMode); },
+  'toggle-download': toggleDownload,
+};
+
+function bindEvents() {
+  document.body.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    const act = el.dataset.action;
+    // mini-bar: play button shouldn't also expand
+    if (act === 'toggle-play' && el.dataset.stop) { e.stopPropagation(); }
+    if (actions[act]) { actions[act](); }
+  });
+
+  // Enter key on login fields
+  ['inp-master-pw', 'inp-secret-key'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); }));
+  $('inp-unlock-pw').addEventListener('keydown', e => { if (e.key === 'Enter') handleUnlock(); });
+
+  // Sheet chips
+  $('chips').addEventListener('click', (e) => {
+    const c = e.target.closest('.chip'); if (!c) return;
+    if (c.dataset.custom) {
+      const v = prompt('Custom timer (minutes):', String(S.timerPrefs.minutes));
+      const n = parseInt(v, 10);
+      if (n && n > 0 && n <= 600) S.timerPrefs.minutes = n;
+    } else {
+      S.timerPrefs.minutes = parseInt(c.dataset.preset, 10);
+    }
+    renderChips(); updateSheetCta(); savePersist();
+  });
+
+  // Sheet toggles
+  document.querySelectorAll('[data-toggle]').forEach(sw => {
+    sw.addEventListener('click', () => {
+      const key = sw.dataset.toggle;
+      S.timerPrefs[key] = !S.timerPrefs[key];
+      sw.classList.toggle('on', S.timerPrefs[key]);
+      savePersist();
+    });
+  });
+
+  // Grid: tap vs long-press
+  const grid = $('grid');
+  let pressId = null, pressTimer = null, moved = false, startX = 0, startY = 0;
+  grid.addEventListener('pointerdown', (e) => {
+    const tile = e.target.closest('.tile'); if (!tile) return;
+    pressId = tile.dataset.id; moved = false;
+    startX = e.clientX; startY = e.clientY;
+    if (S.selectMode) return; // taps handled on pointerup
+    pressTimer = setTimeout(() => { pressTimer = null; enterSelectMode(pressId); }, 450);
+  });
+  grid.addEventListener('pointermove', (e) => {
+    if (pressId == null) return;
+    if (Math.abs(e.clientX - startX) > 10 || Math.abs(e.clientY - startY) > 10) {
+      moved = true;
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    }
+  });
+  function endPress() {
+    if (pressId == null) return;
+    const id = pressId; pressId = null;
+    if (S.selectMode) { if (!moved) toggleSelect(id); return; }
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; if (!moved) { const t = S.byId[id]; if (t) playSingle(t); } }
+  }
+  grid.addEventListener('pointerup', endPress);
+  grid.addEventListener('pointercancel', () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } pressId = null; });
+
+  // Scrubber drag
+  bindSlider($('scrub-track'), (p) => {
+    const dur = audio.duration || 0;
+    $('scrub-fill').style.width = (p * 100) + '%';
+    $('scrub-thumb').style.left = (p * 100) + '%';
+    $('time-cur').textContent = formatTime(p * dur);
+  }, { onStart: () => { S.scrubDragging = true; }, onEnd: (p) => { S.scrubDragging = false; if (audio.duration) audio.currentTime = p * audio.duration; } });
+
+  // Volume drag
+  bindSlider($('vol-track'), (p) => {
+    S.volume = p; S.savedVolume = p;
+    if (!S.fadeId) audio.volume = p;
+    updateVolUI();
+  }, { onEnd: () => savePersist() });
+
+  // Swipe down to collapse now-playing
+  let npY = 0;
+  $('now').addEventListener('touchstart', (e) => { npY = e.touches[0].clientY; }, { passive: true });
+  $('now').addEventListener('touchend', (e) => {
+    if (e.changedTouches[0].clientY - npY > 90) collapseNow();
+  }, { passive: true });
+
+  // Connectivity
+  window.addEventListener('online', () => { S.connectivity = 'online'; toast('Back online'); renderGrid(); });
+  window.addEventListener('offline', () => { S.connectivity = 'offline'; toast('Offline — cached sounds still play'); renderGrid(); });
+
+  // Persist on hide
+  document.addEventListener('visibilitychange', () => { if (document.hidden) savePersist(); });
+  window.addEventListener('pagehide', savePersist);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  PWA: manifest (runtime blob) + service worker
+// ══════════════════════════════════════════════════════════════
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.register("./sw.js").catch(() => {});
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Init
+// ══════════════════════════════════════════════════════════════
+function init() {
+  registerServiceWorker();
+  bindEvents();
+  $('login').classList.add('active');
+  if (localStorage.getItem('snoozz_creds')) showUnlockForm();
+  else showFullLogin();
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+else init();
+
+})();
+</script>
+</body>
+</html>
