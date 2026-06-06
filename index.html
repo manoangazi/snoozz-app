@@ -53,6 +53,9 @@ html, body {
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 button:focus:not(:focus-visible) { outline: none; }
 button { font-family: inherit; color: inherit; cursor: pointer; border: none; background: none; -webkit-appearance: none; appearance: none; touch-action: manipulation; }
+/* Controls rendered as div[role=button] (iOS 26 collapses appearance:none <button>s
+   that have no solid background — toolbar icons & timer chips vanished). */
+[role="button"] { cursor: pointer; touch-action: manipulation; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
@@ -101,7 +104,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 
 /* z-index + solid bg + own layer keep the bar painted during iOS momentum scroll
    (it sits outside the scroller so it's already locked by layout — this stops the flicker). */
-.topbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 18px 12px; flex: 0 0 auto; position: relative; z-index: 3; background: var(--bg); transform: translateZ(0); }
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 18px 12px; flex: 0 0 auto; position: relative; z-index: 3; background: var(--bg); }
 .topbar-brand { display: flex; align-items: center; gap: 9px; }
 .topbar-brand .moon { width: 18px; height: 18px; }
 .topbar-brand .moon::after { right: -3px; top: -2px; width: 15px; height: 15px; }
@@ -118,7 +121,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 #refresh-art-btn.spinning { color: var(--accent); border-color: var(--accent); animation: spin 0.9s linear infinite; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-#topbar-select { display: none; align-items: center; justify-content: space-between; padding: 8px 18px 12px; flex: 0 0 auto; position: relative; z-index: 3; background: var(--bg); transform: translateZ(0); }
+#topbar-select { display: none; align-items: center; justify-content: space-between; padding: 8px 18px 12px; flex: 0 0 auto; position: relative; z-index: 3; background: var(--bg); }
 #topbar-select.active { display: flex; }
 #topbar-select .center { font-size: 17px; font-weight: 600; }
 #topbar-select .side { font: 15px var(--font); color: var(--ink-dim); padding: 8px; min-width: 56px; }
@@ -185,7 +188,11 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 .tray-actions button:disabled { opacity: 0.4; }
 
 /* ── Mini bar ── */
-#mini { display: none; margin: 0 12px 10px; padding: 9px 11px; border-radius: var(--r-bar); border: 1.5px solid var(--ink-faint); background: var(--bg-raised); align-items: center; gap: 11px; flex: 0 0 auto; cursor: pointer; }
+/* Docked to the bottom edge: full width, rounded top only, no side/bottom margins.
+   The negative bottom margin pulls the bar through #app's safe-area padding so its
+   background fills behind the home indicator, while padding-bottom keeps the row of
+   content sitting above the indicator. */
+#mini { display: none; margin: 0 0 calc(var(--safe-bottom) * -1); padding: 9px 12px calc(9px + var(--safe-bottom)); border-radius: var(--r-bar) var(--r-bar) 0 0; border: 1.5px solid var(--ink-faint); border-bottom: none; background: var(--bg-raised); align-items: center; gap: 11px; flex: 0 0 auto; cursor: pointer; }
 #mini.active { display: flex; }
 .mini-art { width: 40px; height: 40px; border-radius: 9px; flex: 0 0 auto; background: oklch(0.42 0.07 var(--mini-hue, 248)); overflow: hidden; position: relative; }
 .mini-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
@@ -231,18 +238,25 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 .np-vol-track { flex: 1; height: 4px; border-radius: 2px; background: var(--ink-faint); position: relative; cursor: pointer; }
 .np-vol-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ink); opacity: 0.7; border-radius: 2px; width: 55%; }
 .np-vol-thumb { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 12px; height: 12px; border-radius: 50%; background: var(--ink); left: 55%; }
+/* iOS ignores audio.volume during normal hi-res playback, so the slider can't do
+   anything there until a fade routes audio through Web Audio — hide it to avoid a
+   dead control. Use the hardware volume buttons instead. */
+body.ios .np-vol { display: none; }
 
 /* ── Sheet ── */
 #scrim { display: none; position: absolute; inset: 0; z-index: 50; background: rgba(13,14,18,0.72); cursor: pointer; }
 #scrim.active { display: block; }
-#sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 51; transform: translateY(100%); transition: transform .3s ease; background: var(--bg-raised); border-radius: var(--r-sheet) var(--r-sheet) 0 0; border-top: 1.5px solid var(--ink-faint); box-shadow: 0 -20px 50px rgba(0,0,0,0.5); padding: 14px 20px calc(26px + var(--safe-bottom)); touch-action: pan-y; }
+#sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 51; transform: translateY(100%); transition: transform .3s ease; background: var(--bg-raised); border-radius: var(--r-sheet) var(--r-sheet) 0 0; border-top: 1.5px solid var(--ink-faint); box-shadow: 0 -20px 50px rgba(0,0,0,0.5); padding: 14px 20px calc(26px + var(--safe-bottom)); touch-action: pan-y; max-height: calc(100dvh - var(--safe-top) - 12px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
 #sheet.active { transform: translateY(0); }
 .sheet-grab { width: 38px; height: 5px; border-radius: 3px; background: var(--ink-dim); margin: 0 auto 16px; cursor: pointer; box-sizing: content-box; padding: 10px 30px; background-clip: content-box; }
 .sheet-title { font-size: 21px; font-weight: 600; margin-bottom: 3px; }
 .sheet-sub { font: 11px var(--mono); color: var(--ink-dim); margin-bottom: 16px; }
 .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
-.chip { padding: 9px 16px; border-radius: 999px; border: 1.5px solid var(--ink-dim); color: var(--ink); font-size: 15px; transition: all .15s; }
-.chip.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+/* iOS 26 (Safari "Liquid Glass") drops hairline borders on appearance:none buttons that
+   have no explicit background — chips collapsed to bare text. Draw the outline with an
+   inset box-shadow (paints independently of form-control appearance) + explicit bg. */
+.chip { -webkit-appearance: none; appearance: none; padding: 9px 16px; border-radius: 999px; border: none; box-shadow: inset 0 0 0 1.5px var(--ink-dim); background-color: transparent; color: var(--ink); font-size: 15px; transition: all .15s; }
+.chip.active { box-shadow: inset 0 0 0 1.5px var(--accent); background-color: var(--accent-dim); color: var(--accent); font-weight: 600; }
 .toggles { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
 .toggle-row { display: flex; align-items: center; justify-content: space-between; }
 .toggle-row span { font-size: 16px; }
@@ -297,14 +311,14 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
     <div class="topbar" id="topbar-normal">
       <div class="topbar-brand"><span class="moon"></span><span class="wordmark">Snoozz</span></div>
       <div class="topbar-actions">
-        <button class="icon-btn" id="refresh-art-btn" data-action="refresh-art" title="Refresh cover art">&#8635;</button>
-        <button class="icon-btn" data-action="open-timer" title="Sleep timer">&#9201;</button>
+        <div class="icon-btn" role="button" tabindex="0" id="refresh-art-btn" data-action="refresh-art" title="Refresh cover art">&#8635;</div>
+        <div class="icon-btn" role="button" tabindex="0" data-action="open-timer" title="Sleep timer">&#9201;</div>
       </div>
     </div>
     <div id="topbar-select">
-      <button class="side left" data-action="cancel-select">Cancel</button>
+      <div class="side left" role="button" tabindex="0" data-action="cancel-select">Cancel</div>
       <span class="center">Select tracks</span>
-      <button class="side right" data-action="clear-mix">Clear</button>
+      <div class="side right" role="button" tabindex="0" data-action="clear-mix">Clear</div>
     </div>
 
     <div id="grid-scroll">
@@ -1018,13 +1032,15 @@ function renderChips() {
   const wrap = $('chips');
   wrap.innerHTML = '';
   CFG.PRESETS.forEach(p => {
-    const c = document.createElement('button');
+    const c = document.createElement('div');
     c.className = 'chip' + (p === S.timerPrefs.minutes ? ' active' : '');
+    c.setAttribute('role', 'button'); c.tabIndex = 0;
     c.textContent = p + ' min';
     c.dataset.preset = p;
     wrap.appendChild(c);
   });
-  const custom = document.createElement('button');
+  const custom = document.createElement('div');
+  custom.setAttribute('role', 'button'); custom.tabIndex = 0;
   custom.className = 'chip' + (CFG.PRESETS.includes(S.timerPrefs.minutes) ? '' : ' active');
   custom.textContent = CFG.PRESETS.includes(S.timerPrefs.minutes) ? 'Custom…' : `${S.timerPrefs.minutes} min`;
   custom.dataset.custom = '1';
@@ -1833,6 +1849,7 @@ function registerServiceWorker() {
 //  Init
 // ══════════════════════════════════════════════════════════════
 function init() {
+  if (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.userAgent))) document.body.classList.add('ios');
   registerServiceWorker();
   bindEvents();
   $('login').classList.add('active');
