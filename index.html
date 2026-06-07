@@ -1882,7 +1882,7 @@ function mountDebug() {
     function tY(el) { if (!el) return '?'; const m = getComputedStyle(el).transform; if (m === 'none') return 'none'; const p = m.match(/matrix\([^)]*\)/); return p ? p[0].split(',').pop().trim().replace(')','') : m.slice(0,16); }
     const S = (window.__snoozz && window.__snoozz.S) || {};
     box.textContent =
-      'ios:' + document.body.classList.contains('ios') +
+      'BUILD: FIXED-APP-2  ios:' + document.body.classList.contains('ios') +
       '\ntopbar: top' + rtop(tb) + ' h' + h(tb) +
       '\nsheet: top' + rtop(sheet) + ' h' + h(sheet) + ' .active=' + (sheet && sheet.classList.contains('active')) + ' tY=' + tY(sheet) +
       '\nscrim .active=' + (scrim && scrim.classList.contains('active')) + ' disp=' + (scrim ? getComputedStyle(scrim).display : '?') +
