@@ -1856,22 +1856,33 @@ function mountDebug() {
   let lastErr = '';
   window.addEventListener('error', e => { lastErr = 'ERR ' + (e.message || '') + ' @' + (e.lineno || '?'); });
   window.addEventListener('unhandledrejection', e => { lastErr = 'REJ ' + ((e.reason && e.reason.message) || e.reason || ''); });
-  function info(el) { if (!el) return 'null'; const r = el.getBoundingClientRect(), c = getComputedStyle(el); return `top${Math.round(r.top)} h${Math.round(r.height)} ${c.display}`; }
+  let maxChips = 0;
+  function h(el) { return el ? Math.round(el.getBoundingClientRect().height) : -1; }
   function refresh() {
-    const app = document.getElementById('app'), ap = app && getComputedStyle(app);
-    const chips = document.querySelectorAll('.chip'), c0 = chips[0];
-    let chipInfo = String(chips.length);
-    if (c0) { const r = c0.getBoundingClientRect(), cs = getComputedStyle(c0); chipInfo = `${chips.length} w${Math.round(r.width)} h${Math.round(r.height)} ${cs.display} ${cs.visibility} col${cs.color.replace(/\s/g,'')}`; }
+    const tb = document.getElementById('topbar-normal');
+    const brand = tb && tb.querySelector('.topbar-brand');
+    const acts = tb && tb.querySelector('.topbar-actions');
+    const icon = tb && tb.querySelector('.icon-btn');
+    const wm = tb && tb.querySelector('.wordmark');
+    const tbcs = tb && getComputedStyle(tb);
+    const iccs = icon && getComputedStyle(icon);
+    const chipsWrap = document.getElementById('chips');
+    const liveChips = chipsWrap ? chipsWrap.childElementCount : -1;
+    if (liveChips > maxChips) maxChips = liveChips;
+    const c0 = chipsWrap && chipsWrap.firstElementChild;
+    let chipInfo = 'live' + liveChips + ' max' + maxChips;
+    if (c0) { const cs = getComputedStyle(c0); chipInfo += ' h' + h(c0) + ' ' + cs.display + ' ' + cs.visibility + ' col' + cs.color.replace(/\s/g,''); }
+    let rules = '?'; try { rules = (document.styleSheets[0].cssRules || []).length; } catch(e) { rules = 'BLOCKED'; }
     box.textContent =
-      'ios:' + document.body.classList.contains('ios') +
-      '\ninnerH:' + window.innerHeight + ' clientH:' + document.documentElement.clientHeight +
-      '\npadT:' + (ap ? ap.paddingTop : '?') + ' padB:' + (ap ? ap.paddingBottom : '?') +
-      '\ntopbar:' + info(document.getElementById('topbar-normal')) +
-      '\nsheet:' + info(document.getElementById('sheet')) + ' max' + (document.getElementById('sheet') ? getComputedStyle(document.getElementById('sheet')).maxHeight : '?') +
-      '\nchips:' + chipInfo +
+      'ios:' + document.body.classList.contains('ios') + ' rules:' + rules +
+      '\nvv:' + (window.visualViewport ? Math.round(window.visualViewport.height) : '?') + ' innerH:' + window.innerHeight + ' clientH:' + document.documentElement.clientHeight +
+      '\ntopbar h' + h(tb) + ' disp:' + (tbcs ? tbcs.display : '?') + ' pos:' + (tbcs ? tbcs.position : '?') + ' padT:' + (tbcs ? tbcs.paddingTop : '?') +
+      '\n brand h' + h(brand) + ' acts h' + h(acts) + ' wm h' + h(wm) + ' fs' + (wm ? getComputedStyle(wm).fontSize : '?') +
+      '\n icon h' + h(icon) + ' cssH:' + (iccs ? iccs.height : '?') + ' disp:' + (iccs ? iccs.display : '?') +
+      '\nchipsWrap h' + h(chipsWrap) + ' chips:' + chipInfo +
       (lastErr ? '\n' + lastErr : '');
   }
-  refresh(); setInterval(refresh, 500);
+  refresh(); setInterval(refresh, 250);
 }
 
 // ══════════════════════════════════════════════════════════════
