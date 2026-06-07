@@ -495,6 +495,12 @@ function attachAudioListeners(el) {
 function newAudioElement() {
   const el = new Audio();
   el.preload = 'auto';
+  // Required for the sleep-timer fade: routing a cross-origin (S3) stream through Web
+  // Audio (createMediaElementSource) outputs SILENCE unless the element is CORS-enabled.
+  // The bucket already returns CORS headers (metadata fetch + offline download rely on
+  // them), so this is safe and doesn't affect direct playback. Cached blob: URLs are
+  // same-origin, so it's a no-op for them.
+  el.crossOrigin = 'anonymous';
   attachAudioListeners(el);
   return el;
 }
