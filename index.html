@@ -913,10 +913,10 @@ function startTimer(minutes) {
   S.tickId = setInterval(tickTimer, 250);
   tickTimer();
 }
-function clearTimer() {
+function clearTimer(keepSilent) {
   if (S.tickId) { clearInterval(S.tickId); S.tickId = null; }
   if (S.fadeId) { clearInterval(S.fadeId); S.fadeId = null; }
-  cancelFade();
+  cancelFade(keepSilent);
   S.timer.isRunning = false; S.timer.endTime = null; S.timer.minutes = null;
   $('np-ring').style.display = 'none';
 }
@@ -974,8 +974,10 @@ function startFade(remMs) {
     if (frac >= 1) { clearInterval(S.fadeId); S.fadeId = null; }
   }, CFG.FADE_STEP_MS);
 }
-// Stop any in-progress fade and restore full level (both fade paths).
-function cancelFade() {
+// Stop any in-progress fade. Normally restore full level (e.g. when extending the timer);
+// when keepSilent is set (natural timer end) leave the gain at ~0 — restoring full volume
+// would amplify the buffered Web Audio tail after audio.pause() and produce a loud blip.
+function cancelFade(keepSilent) {
   S._fadeStarted = false;
   if (S.fadeId) { clearInterval(S.fadeId); S.fadeId = null; }
   audio.volume = S.volume;
@@ -983,16 +985,15 @@ function cancelFade() {
     try {
       const now = audioCtx.currentTime;
       gainNode.gain.cancelScheduledValues(now);
-      gainNode.gain.setValueAtTime(S.volume, now);
+      gainNode.gain.setValueAtTime(keepSilent ? 0.0001 : S.volume, now);
     } catch {}
   }
 }
 function finishTimer() {
   audio.pause();
   S._fadeStarted = false;
-  audio.volume = S.volume;
   S.isPlaying = false;
-  clearTimer();
+  clearTimer(true); // keep gain silent — don't blip the buffered tail back to full volume
   updateAllUI();
   toast('Sleep timer ended');
   savePersist();
