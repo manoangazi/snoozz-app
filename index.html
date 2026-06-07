@@ -65,6 +65,11 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 
 #app {
   display: flex; flex-direction: column;
+  /* Pin to the viewport. iOS 26 was letting the document scroll (toolbar pushed to
+     y=-130) and was anchoring the absolutely-positioned sheet/scrim to the scrolled
+     page instead of the screen. position:fixed locks layout AND makes #app the
+     containing block so bottom-sheet translateY(100%) hides correctly. */
+  position: fixed; inset: 0;
   height: 100vh; height: 100dvh;
   padding-top: var(--safe-top);
   padding-bottom: var(--safe-bottom);
@@ -1873,20 +1878,15 @@ function mountDebug() {
     let chipInfo = 'live' + liveChips + ' max' + maxChips;
     if (c0) { const cs = getComputedStyle(c0); chipInfo += ' h' + h(c0) + ' ' + cs.display + ' ' + cs.visibility + ' col' + cs.color.replace(/\s/g,''); }
     const sheet = document.getElementById('sheet'), scrim = document.getElementById('scrim');
-    // draw outlines directly on the real elements so a screenshot shows their true positions
-    if (tb) tb.style.outline = '3px solid red';
-    if (sheet) sheet.style.outline = '3px solid lime';
-    if (chipsWrap) chipsWrap.style.outline = '3px solid cyan';
-    if (scrim) scrim.style.outline = '4px dashed magenta';
     function rtop(el) { return el ? Math.round(el.getBoundingClientRect().top) : -1; }
     function tY(el) { if (!el) return '?'; const m = getComputedStyle(el).transform; if (m === 'none') return 'none'; const p = m.match(/matrix\([^)]*\)/); return p ? p[0].split(',').pop().trim().replace(')','') : m.slice(0,16); }
     const S = (window.__snoozz && window.__snoozz.S) || {};
     box.textContent =
       'ios:' + document.body.classList.contains('ios') +
-      '\nRED topbar: top' + rtop(tb) + ' h' + h(tb) +
-      '\nLIME sheet: top' + rtop(sheet) + ' h' + h(sheet) + ' .active=' + (sheet && sheet.classList.contains('active')) + ' tY=' + tY(sheet) +
-      '\nMAGENTA scrim .active=' + (scrim && scrim.classList.contains('active')) + ' disp=' + (scrim ? getComputedStyle(scrim).display : '?') +
-      '\nCYAN chips: live' + (chipsWrap ? chipsWrap.childElementCount : -1) + ' max' + maxChips +
+      '\ntopbar: top' + rtop(tb) + ' h' + h(tb) +
+      '\nsheet: top' + rtop(sheet) + ' h' + h(sheet) + ' .active=' + (sheet && sheet.classList.contains('active')) + ' tY=' + tY(sheet) +
+      '\nscrim .active=' + (scrim && scrim.classList.contains('active')) + ' disp=' + (scrim ? getComputedStyle(scrim).display : '?') +
+      '\nchips: live' + (chipsWrap ? chipsWrap.childElementCount : -1) + ' max' + maxChips +
       '\nS.queue=' + (S.queue ? S.queue.length : '?') + ' selectMode=' + S.selectMode +
       (lastErr ? '\n' + lastErr : '');
   }
