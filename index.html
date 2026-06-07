@@ -1850,7 +1850,7 @@ function registerServiceWorker() {
 // ══════════════════════════════════════════════════════════════
 function mountDebug() {
   const box = document.createElement('div');
-  box.style.cssText = 'position:fixed;left:4px;top:4px;z-index:2147483647;background:#000;color:#0f0;font:11px/1.35 ui-monospace,monospace;padding:6px 8px;border:1px solid #0f0;border-radius:6px;max-width:64vw;white-space:pre;pointer-events:none;';
+  box.style.cssText = 'position:fixed;left:4px;top:300px;z-index:2147483647;background:rgba(0,0,0,0.86);color:#0f0;font:11px/1.35 ui-monospace,monospace;padding:6px 8px;border:1px solid #0f0;border-radius:6px;max-width:70vw;white-space:pre;pointer-events:none;';
   const add = () => { if (document.body) document.body.appendChild(box); else setTimeout(add, 50); };
   add();
   let lastErr = '';
@@ -1872,17 +1872,23 @@ function mountDebug() {
     const c0 = chipsWrap && chipsWrap.firstElementChild;
     let chipInfo = 'live' + liveChips + ' max' + maxChips;
     if (c0) { const cs = getComputedStyle(c0); chipInfo += ' h' + h(c0) + ' ' + cs.display + ' ' + cs.visibility + ' col' + cs.color.replace(/\s/g,''); }
-    let rules = '?'; try { rules = (document.styleSheets[0].cssRules || []).length; } catch(e) { rules = 'BLOCKED'; }
-    // ancestor chain from topbar up to body: name:display/height
-    let chain = ''; let n = tb;
-    while (n && n !== document.documentElement) { const c = getComputedStyle(n); chain += (n.id || n.className || n.tagName) + ':' + c.display + '/' + h(n) + '\n'; n = n.parentElement; }
+    const sheet = document.getElementById('sheet'), scrim = document.getElementById('scrim');
+    // draw outlines directly on the real elements so a screenshot shows their true positions
+    if (tb) tb.style.outline = '3px solid red';
+    if (sheet) sheet.style.outline = '3px solid lime';
+    if (chipsWrap) chipsWrap.style.outline = '3px solid cyan';
+    if (scrim) scrim.style.outline = '4px dashed magenta';
+    function rtop(el) { return el ? Math.round(el.getBoundingClientRect().top) : -1; }
+    function tY(el) { if (!el) return '?'; const m = getComputedStyle(el).transform; if (m === 'none') return 'none'; const p = m.match(/matrix\([^)]*\)/); return p ? p[0].split(',').pop().trim().replace(')','') : m.slice(0,16); }
+    const S = (window.__snoozz && window.__snoozz.S) || {};
     box.textContent =
-      'ios:' + document.body.classList.contains('ios') + ' rules:' + rules +
-      '\nvv:' + (window.visualViewport ? Math.round(window.visualViewport.height) : '?') + ' innerH:' + window.innerHeight + ' clientH:' + document.documentElement.clientHeight +
-      '\nicon cssH:' + (iccs ? iccs.height : '?') + ' rectH:' + h(icon) +
-      '\nchips live' + (chipsWrap ? chipsWrap.childElementCount : -1) + ' max' + maxChips +
-      '\n--chain up from topbar--\n' + chain +
-      (lastErr ? lastErr : '');
+      'ios:' + document.body.classList.contains('ios') +
+      '\nRED topbar: top' + rtop(tb) + ' h' + h(tb) +
+      '\nLIME sheet: top' + rtop(sheet) + ' h' + h(sheet) + ' .active=' + (sheet && sheet.classList.contains('active')) + ' tY=' + tY(sheet) +
+      '\nMAGENTA scrim .active=' + (scrim && scrim.classList.contains('active')) + ' disp=' + (scrim ? getComputedStyle(scrim).display : '?') +
+      '\nCYAN chips: live' + (chipsWrap ? chipsWrap.childElementCount : -1) + ' max' + maxChips +
+      '\nS.queue=' + (S.queue ? S.queue.length : '?') + ' selectMode=' + S.selectMode +
+      (lastErr ? '\n' + lastErr : '');
   }
   refresh(); setInterval(refresh, 250);
 }
