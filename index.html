@@ -22,7 +22,7 @@ input, textarea { -webkit-user-select: text; user-select: text; }
   --bg: #0d0e12;
   --bg-raised: #101218;
   --ink: rgba(228,233,243,0.82);
-  --ink-dim: rgba(228,233,243,0.42);
+  --ink-dim: rgba(228,233,243,0.82);
   --ink-faint: rgba(228,233,243,0.18);
   --fill: rgba(228,233,243,0.05);
   --fill2: rgba(228,233,243,0.085);
@@ -154,7 +154,8 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 /* metadata block pinned to tile bottom */
 .tile-meta { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 8px 7px; z-index: 2; }
 .tile-title { display: block; font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.96); line-height: 1.2; text-shadow: 0 1px 4px rgba(0,0,0,0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile-sub { display: block; font: 9px var(--mono); color: rgba(255,255,255,0.58); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.01em; }
+.tile-sub { display: block; font: 9px var(--mono); color: rgba(255,255,255,0.96); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.01em; }
+.tile-time { display: block; font: 9px var(--mono); color: rgba(255,255,255,0.96); margin-top: 1px; letter-spacing: -0.01em; }
 .tile-badge {
   position: absolute; right: 6px; top: 6px; width: 19px; height: 19px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center; font: 11px var(--mono);
@@ -228,6 +229,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 .np-meta { text-align: center; }
 .np-title { font-size: 27px; font-weight: 600; }
 .np-source { font: 12px var(--mono); color: var(--ink-dim); margin-top: 5px; }
+.np-artist { font-size: 13px; color: var(--ink); }
 .np-scrub { display: flex; flex-direction: column; gap: 6px; }
 .scrub-track { height: 4px; border-radius: 2px; background: var(--ink-faint); position: relative; cursor: pointer; }
 .scrub-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 2px; width: 0; }
@@ -1452,10 +1454,10 @@ function buildTileHTML(t) {
   const parts = [];
   if (t.artist) parts.push(escHtml(t.artist));
   if (t.album && t.album !== t.artist) parts.push(escHtml(t.album));
-  if (t.duration) parts.push(formatTime(t.duration));
   const sub = parts.length ? `<span class="tile-sub">${parts.join(' · ')}</span>` : '';
+  const time = t.duration ? `<span class="tile-time">${formatTime(t.duration)}</span>` : '';
   return `<div class="tile${sel?' selected':''}${playing?' playing':''}${dim?' dim':''}${disabled?' disabled':''}" data-id="${escHtml(t.id)}" style="--hue:${t.hue}">
-    <div class="block">${img}<div class="tile-overlay"></div>${wave}${corner}<div class="tile-meta"><span class="tile-title">${escHtml(t.title)}</span>${sub}</div></div>
+    <div class="block">${img}<div class="tile-overlay"></div>${wave}${corner}<div class="tile-meta"><span class="tile-title">${escHtml(t.title)}</span>${sub}${time}</div></div>
   </div>`;
 }
 
@@ -1551,7 +1553,7 @@ function renderNowPlaying() {
   if (S.timer.isRunning) updateTimerUI();
   else {
     const srcLine = `${sourceWord(t)} · ${g}`;
-    $('np-source').innerHTML = meta ? `${escHtml(meta)}<br><span style="opacity:.6">${srcLine}</span>` : srcLine;
+    $('np-source').innerHTML = meta ? `<span class="np-artist">${escHtml(meta)}</span><br><span style="opacity:.6">${srcLine}</span>` : srcLine;
   }
   $('np-dl').classList.toggle('accent', t.cached);
   $('loop-btn').classList.toggle('on', S.loopMode);
