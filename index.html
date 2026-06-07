@@ -1873,14 +1873,16 @@ function mountDebug() {
     let chipInfo = 'live' + liveChips + ' max' + maxChips;
     if (c0) { const cs = getComputedStyle(c0); chipInfo += ' h' + h(c0) + ' ' + cs.display + ' ' + cs.visibility + ' col' + cs.color.replace(/\s/g,''); }
     let rules = '?'; try { rules = (document.styleSheets[0].cssRules || []).length; } catch(e) { rules = 'BLOCKED'; }
+    // ancestor chain from topbar up to body: name:display/height
+    let chain = ''; let n = tb;
+    while (n && n !== document.documentElement) { const c = getComputedStyle(n); chain += (n.id || n.className || n.tagName) + ':' + c.display + '/' + h(n) + '\n'; n = n.parentElement; }
     box.textContent =
       'ios:' + document.body.classList.contains('ios') + ' rules:' + rules +
       '\nvv:' + (window.visualViewport ? Math.round(window.visualViewport.height) : '?') + ' innerH:' + window.innerHeight + ' clientH:' + document.documentElement.clientHeight +
-      '\ntopbar h' + h(tb) + ' disp:' + (tbcs ? tbcs.display : '?') + ' pos:' + (tbcs ? tbcs.position : '?') + ' padT:' + (tbcs ? tbcs.paddingTop : '?') +
-      '\n brand h' + h(brand) + ' acts h' + h(acts) + ' wm h' + h(wm) + ' fs' + (wm ? getComputedStyle(wm).fontSize : '?') +
-      '\n icon h' + h(icon) + ' cssH:' + (iccs ? iccs.height : '?') + ' disp:' + (iccs ? iccs.display : '?') +
-      '\nchipsWrap h' + h(chipsWrap) + ' chips:' + chipInfo +
-      (lastErr ? '\n' + lastErr : '');
+      '\nicon cssH:' + (iccs ? iccs.height : '?') + ' rectH:' + h(icon) +
+      '\nchips live' + (chipsWrap ? chipsWrap.childElementCount : -1) + ' max' + maxChips +
+      '\n--chain up from topbar--\n' + chain +
+      (lastErr ? lastErr : '');
   }
   refresh(); setInterval(refresh, 250);
 }
