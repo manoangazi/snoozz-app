@@ -1719,7 +1719,11 @@ async function toggleDownload() {
 function bindSlider(trackEl, onSet, opts = {}) {
   function pct(e) {
     const r = trackEl.getBoundingClientRect();
-    const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+    // On touchend, e.touches is empty (finger lifted) — read changedTouches instead.
+    // Falling through to e itself covers mouse events. (Previously e.touches[0] on
+    // touchend threw, so onEnd never ran: scrubber stayed "dragging" and never seeked.)
+    const pt = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
+    const x = pt.clientX - r.left;
     return Math.max(0, Math.min(1, x / r.width));
   }
   let dragging = false;
