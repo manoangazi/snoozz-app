@@ -885,11 +885,17 @@ function togglePlay() {
 // End the session and dismiss the player UI back to the grid: collapse Now Playing,
 // hide the mini-bar, and drop the queue so the "playing" tile highlight clears.
 // keepSilent is forwarded to clearTimer (timer-end keeps the faded gain at 0).
-function stopPlayback(keepSilent) {
+function stopPlayback() {
+  // Ending the session: drop the Web Audio gain to silence BEFORE pausing so the buffered
+  // tail can't blip through at full volume. clearTimer(true) keeps it silent (no restore);
+  // the next play resets volume via loadAndPlay / setupFadeGraph.
+  if (gainNode && audioCtx) {
+    try { const now = audioCtx.currentTime; gainNode.gain.cancelScheduledValues(now); gainNode.gain.setValueAtTime(0.0001, now); } catch {}
+  }
   try { audio.pause(); } catch {}
   S.isPlaying = false;
   S._fadeStarted = false;
-  clearTimer(keepSilent);
+  clearTimer(true);
   S.queue = []; S.queueIdx = 0; S.playingId = null;
   if (S.expanded) collapseNow();
   $('mini').classList.remove('active');
@@ -993,7 +999,6 @@ function startFade(remMs) {
 function cancelFade(keepSilent) {
   S._fadeStarted = false;
   if (S.fadeId) { clearInterval(S.fadeId); S.fadeId = null; }
-  audio.volume = S.volume;
   if (gainNode && audioCtx) {
     try {
       const now = audioCtx.currentTime;
@@ -1001,10 +1006,13 @@ function cancelFade(keepSilent) {
       gainNode.gain.setValueAtTime(keepSilent ? 0.0001 : S.volume, now);
     } catch {}
   }
+  // Only restore element volume when continuing (e.g. extending the timer). During a
+  // stop/teardown (keepSilent) leave it low — loadAndPlay resets it on the next play —
+  // so the buffered tail can't surge back to full volume as playback is torn down.
+  if (!keepSilent) audio.volume = S.volume;
 }
 function finishTimer() {
-  // keepSilent=true: don't blip the buffered tail back to full volume as we tear down.
-  stopPlayback(true);
+  stopPlayback(); // teardown always keeps the gain silent — no end-of-fade blip
   toast('Sleep timer ended');
 }
 function extendTimer() {
