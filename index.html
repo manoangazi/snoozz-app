@@ -844,7 +844,7 @@ async function loadAndPlay(idx, autoplay) {
   updateMediaSession();
 }
 
-async function startQueue(trackObjs, { loop = true, timerMinutes = null } = {}) {
+async function startQueue(trackObjs, { loop = false, timerMinutes = null } = {}) {
   if (!trackObjs.length) return;
   ensureFreshAudio(); // restore a pristine (hi-res, untainted) element if a prior fade used Web Audio
   // Build the fade graph now, inside the "Start" gesture, so the end-of-session GainNode
@@ -862,7 +862,8 @@ async function startQueue(trackObjs, { loop = true, timerMinutes = null } = {}) 
 
 function playSingle(t) {
   if (!isPlayable(t)) { toast('Offline — open it and tap ↓ to download'); return; }
-  startQueue([t], { loop: true, timerMinutes: null });
+  // No timer → play once and stop. Looping is opt-in: a sleep timer, or the manual loop button.
+  startQueue([t], { loop: false, timerMinutes: null });
 }
 
 function handleEnded() {
@@ -1051,7 +1052,8 @@ function playMix() {
   const ids = S.mix.slice();
   exitSelectMode();
   S.mix = ids; // keep for persistence
-  startQueue(tracks, { loop: true, timerMinutes: null });
+  // No timer → play the mix through once, then stop. (Timed mixes loop via the timer.)
+  startQueue(tracks, { loop: false, timerMinutes: null });
   savePersist();
 }
 
