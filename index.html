@@ -414,6 +414,7 @@ body.ios .np-vol { display: none; }
       <div class="toggle-row"><span>Fade out last 60s</span><div class="switch" id="tg-fade" data-toggle="fadeOut"></div></div>
       <div class="toggle-row"><span>Shuffle order</span><div class="switch" id="tg-shuffle" data-toggle="shuffle"></div></div>
       <div class="toggle-row"><span>Loop until timer ends</span><div class="switch" id="tg-loop" data-toggle="loop"></div></div>
+      <div class="toggle-row"><span>Crossfade tracks</span><div class="switch" id="tg-xfade" data-toggle="crossfade"></div></div>
     </div>
     <button class="sheet-cta" id="sheet-cta" data-action="start-timer">Start 30-min mix</button>
   </div>
@@ -439,6 +440,8 @@ const CFG = Object.freeze({
   PBKDF2_ITER:     310_000,
   FADE_WINDOW_MS:  60_000,      // fade over last 60s
   FADE_STEP_MS:    200,
+  XFADE_SEC:       10,          // crossfade length (auto-clamped for short tracks)
+  XFADE_MIN_DUR:   25,          // tracks shorter than this don't crossfade
   MAX_RETRIES:     3,
   TOAST_MS:        3200,
   PRESETS:         [15, 30, 45, 60, 90],
@@ -457,7 +460,7 @@ const S = {
   playingId: null, isPlaying: false,
   volume: 1, savedVolume: 1,
   timer: { minutes: null, endTime: null, fadeWindowMs: CFG.FADE_WINDOW_MS, isRunning: false },
-  timerPrefs: { minutes: 30, fadeOut: true, shuffle: false, loop: true },
+  timerPrefs: { minutes: 30, fadeOut: true, shuffle: false, loop: true, crossfade: false },
   tickId: null, fadeId: null,
   connectivity: navigator.onLine ? 'online' : 'offline',
   urlCache: {}, objectUrls: new Set(),
@@ -465,60 +468,227 @@ const S = {
   positions: {},
   expanded: false,
   scrubDragging: false,
+  xfadeActive: false, _xfading: false, _xfadeArmedIdx: -1,  // crossfade engine (transient)
 };
 
 const $ = id => document.getElementById(id);
-let audio;                 // current playback element; rebuilt after a Web Audio fade taints it
 let audioRetry = 0;
-// Web Audio is used ONLY for the sleep-timer fade — iOS ignores audio.volume, so a
-// GainNode is the only way to ramp output there. Attaching a MediaElementSource taints
-// the element (iOS then resamples it), which is fine for the end-of-session fade; we
-// rebuild a pristine element next session to restore true hi-res direct playback.
-let audioCtx = null, srcNode = null, gainNode = null, waTainted = false;
+// ── Audio engine ──────────────────────────────────────────────────────────────
+// Normal playback runs a single HTMLAudioElement on the DIRECT path (true hi-res; iOS
+// plays it untouched). Two features need software gain, which iOS only honours through a
+// Web Audio GainNode (audio.volume is ignored) — at the cost of iOS resampling to ~48kHz:
+//   • the sleep-timer fade  → one deck → masterGain ramped to 0
+//   • crossfade between tracks → two decks (A/B), equal-power blend, opt-in via timerPrefs.crossfade
+// We build the Web Audio graph ONLY when one of those is engaged, and rebuild pristine
+// elements afterwards (ensureFreshAudio), so a lone track is always bit-perfect hi-res.
+// masterGain carries volume + the sleep fade (downstream of the blend); per-deck gains do
+// the crossfade only.
+let audioCtx = null, masterGain = null, waTainted = false;
+let active = 0;                          // index into decks[] of the foreground deck
+function makeDeckSlot() { return { el: null, src: null, gain: null, idx: -1, endedGuard: false }; }
+const decks = [makeDeckSlot(), makeDeckSlot()];
+let audio;                               // === decks[active].el (kept in sync by swapDecks/ensureFreshAudio)
 
-function attachAudioListeners(el) {
-  el.addEventListener('ended', handleEnded);
-  el.addEventListener('play', () => { S.isPlaying = true; updatePlayIcons(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
-  el.addEventListener('pause', () => { if (!S.timer.isRunning || el.currentTime) updatePlayIcons(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
-  el.addEventListener('timeupdate', () => { if (!S.scrubDragging) updateScrubber(); });
+function attachAudioListeners(el, deck) {
+  el.addEventListener('ended', () => {
+    if (deck.endedGuard || deck !== decks[active]) return; // ignore a retired/idle deck's late 'ended'
+    handleEnded();
+  });
+  el.addEventListener('play', () => { if (deck !== decks[active]) return; S.isPlaying = true; updatePlayIcons(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
+  el.addEventListener('pause', () => { if (deck !== decks[active]) return; if (!S.timer.isRunning || el.currentTime) updatePlayIcons(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
+  el.addEventListener('timeupdate', () => { if (deck !== decks[active]) return; if (!S.scrubDragging) updateScrubber(); maybeStartCrossfade(); });
   el.addEventListener('playing', () => { audioRetry = 0; });
   el.addEventListener('error', async () => {
-    const t = S.queue[S.queueIdx];
+    const t = S.queue[deck.idx];
     if (!t || t.cached || audioRetry >= CFG.MAX_RETRIES) return;
     audioRetry++;
     delete S.urlCache[t.key];
     try {
       const url = await S.s3.getSignedUrl(t.key);
       el.src = url; el.load();
-      if (S.isPlaying) el.play().catch(() => {});
+      if (S.isPlaying && deck === decks[active]) el.play().catch(() => {});
     } catch {}
   });
 }
-function newAudioElement() {
+function newAudioElement(deck) {
   const el = new Audio();
   el.preload = 'auto';
-  // Required for the sleep-timer fade: routing a cross-origin (S3) stream through Web
-  // Audio (createMediaElementSource) outputs SILENCE unless the element is CORS-enabled.
-  // The bucket already returns CORS headers (metadata fetch + offline download rely on
-  // them), so this is safe and doesn't affect direct playback. Cached blob: URLs are
-  // same-origin, so it's a no-op for them.
+  // CORS-enable so createMediaElementSource on the S3 stream isn't silenced (bucket already
+  // returns CORS headers). No-op for same-origin cached blob: URLs and for direct playback.
   el.crossOrigin = 'anonymous';
-  attachAudioListeners(el);
+  attachAudioListeners(el, deck);
   return el;
 }
-audio = newAudioElement();
+decks[0].el = newAudioElement(decks[0]);
+audio = decks[0].el;
 
-// If a prior sleep-fade routed playback through Web Audio (tainting the element and
-// forcing iOS resampling), rebuild a fresh element so the next session plays hi-res direct.
+// Rebuild BOTH decks fresh + tear down the Web Audio graph, so the next session starts on
+// the pristine DIRECT path (restores true hi-res after a fade/crossfade tainted the elements).
 function ensureFreshAudio() {
   if (!waTainted) return;
-  try { audio.pause(); } catch {}
-  try { srcNode && srcNode.disconnect(); } catch {}
-  try { gainNode && gainNode.disconnect(); } catch {}
+  for (const d of decks) {
+    try { d.el && d.el.pause(); } catch {}
+    try { d.src && d.src.disconnect(); } catch {}
+    try { d.gain && d.gain.disconnect(); } catch {}
+    d.src = d.gain = null; d.idx = -1; d.endedGuard = false;
+  }
+  try { masterGain && masterGain.disconnect(); } catch {}
   try { audioCtx && audioCtx.close(); } catch {}
-  audioCtx = srcNode = gainNode = null; waTainted = false;
-  audio = newAudioElement();
+  audioCtx = masterGain = null; waTainted = false;
+  active = 0;
+  decks[0].el = newAudioElement(decks[0]);
+  decks[1].el = null;                    // recreated lazily when crossfade engages
+  audio = decks[0].el;
   audio.volume = S.volume;
+}
+
+// Build the Web Audio graph from a user gesture (iOS keeps a context created later
+// suspended). single=true wires only the active deck (sleep fade); otherwise both decks
+// are wired for crossfade. Idempotent — re-wiring an already-wired deck is a no-op.
+function buildGraph({ single } = {}) {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return false;
+    if (!audioCtx) {
+      audioCtx = new Ctx();
+      masterGain = audioCtx.createGain();
+      masterGain.connect(audioCtx.destination);
+    }
+    const wire = (deck) => {
+      if (!deck.el) deck.el = newAudioElement(deck);
+      deck.el.volume = 1;                // element neutral; masterGain carries S.volume
+      if (!deck.src) {
+        deck.src = audioCtx.createMediaElementSource(deck.el);
+        deck.gain = audioCtx.createGain();
+        deck.src.connect(deck.gain);
+        deck.gain.connect(masterGain);
+      }
+    };
+    wire(decks[active]);
+    decks[active].gain.gain.setValueAtTime(1, audioCtx.currentTime);
+    if (!single) {
+      const other = decks[active ^ 1];
+      wire(other);
+      other.gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    }
+    waTainted = true;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    masterGain.gain.setValueAtTime(S.volume, audioCtx.currentTime);
+    return true;
+  } catch (e) { console.warn('buildGraph', e.message); return false; }
+}
+
+// Dual-deck analogue of loadAndPlay: load a track onto a specific deck. Does NOT touch
+// S.queueIdx / S.playingId (swapDecks does that when the deck becomes foreground).
+async function deckLoad(deck, idx, { autoplay } = {}) {
+  const t = S.queue[idx]; if (!t) return false;
+  deck.idx = idx; deck.endedGuard = false;
+  const url = await getTrackUrl(t);
+  if (!url) { toast('Cannot load track'); return false; }
+  deck.el.src = url;
+  deck.el.volume = 1;
+  deck.el.load();
+  if (autoplay) { try { await deck.el.play(); } catch (e) { return false; } }
+  return true;
+}
+
+// Shared advance logic (queue order, wrap on loop, reshuffle, end-of-queue). Returns the
+// next index, or null at a no-loop end-of-queue boundary. Used by handleEnded and crossfade.
+function computeNextIndex() {
+  let next = S.queueIdx + 1;
+  if (next >= S.queue.length) {
+    if (!S.loopMode) return null;
+    if (S.timerPrefs.shuffle && S.queue.length > 1) S.queue = shuffle(S.queue);
+    next = 0;
+  }
+  return next;
+}
+
+// Crossfade length for a track, clamped: none for very short tracks, else ≤ a third of it.
+function effectiveXfadeFor(dur) {
+  if (!isFinite(dur) || dur < CFG.XFADE_MIN_DUR) return 0;
+  return Math.min(CFG.XFADE_SEC, dur / 3);
+}
+
+// Equal-power ramp on a deck gain (cos out / sin in), with a linear-ramp fallback.
+function rampGain(gain, from, to, secs, now) {
+  if (!gain) return;
+  const a = Math.max(0.0001, from), b = Math.max(0.0001, to);
+  try {
+    gain.gain.cancelScheduledValues(now);
+    gain.gain.setValueAtTime(a, now);
+    const N = 64, curve = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      const t = i / (N - 1);
+      const v = (from > to) ? Math.cos(t * Math.PI / 2) : Math.sin(t * Math.PI / 2);
+      curve[i] = Math.max(0.0001, v);
+    }
+    gain.gain.setValueCurveAtTime(curve, now, secs);
+  } catch (e) {
+    try { gain.gain.cancelScheduledValues(now); gain.gain.setValueAtTime(a, now); gain.gain.linearRampToValueAtTime(b, now + secs); } catch {}
+  }
+}
+
+// Called from the active deck's timeupdate. Once per track, near the end, kick off the blend.
+function maybeStartCrossfade() {
+  if (!S.xfadeActive || S._xfading || S.scrubDragging) return;
+  const deck = decks[active];
+  const dur = deck.el.duration;
+  const xf = effectiveXfadeFor(dur);
+  if (xf <= 0) return;
+  if (deck.idx === S._xfadeArmedIdx) return;          // already handled this track
+  if (dur - deck.el.currentTime > xf) return;         // not near the end yet
+  S._xfadeArmedIdx = deck.idx;                        // arm once
+  const nextIdx = computeNextIndex();
+  if (nextIdx == null) return;                        // last track, no loop → play out & stop
+  startCrossfade(nextIdx, xf);
+}
+
+// Start the incoming deck at gain 0, equal-power blend the two decks, swap foreground.
+async function startCrossfade(nextIdx, xf) {
+  if (S._xfading || !audioCtx) return;
+  S._xfading = true;
+  const outDeck = decks[active];
+  const inDeck = decks[active ^ 1];
+  if (inDeck.gain) { try { const n = audioCtx.currentTime; inDeck.gain.gain.cancelScheduledValues(n); inDeck.gain.gain.setValueAtTime(0.0001, n); } catch {} }
+  const ok = await deckLoad(inDeck, nextIdx, { autoplay: true });
+  if (!ok) { S._xfading = false; loadAndPlay(nextIdx, true); return; } // 2nd deck failed → hard cut
+  const now = audioCtx.currentTime;
+  rampGain(outDeck.gain, 1, 0.0001, xf, now);
+  rampGain(inDeck.gain, 0.0001, 1, xf, now);
+  swapDecks(nextIdx);
+  setTimeout(() => {
+    outDeck.endedGuard = true;
+    try { outDeck.el.pause(); } catch {}
+    if (outDeck.gain && audioCtx) { try { outDeck.gain.gain.setValueAtTime(0.0001, audioCtx.currentTime); } catch {} }
+    S._xfading = false;
+  }, xf * 1000 + 150);
+}
+
+// Make the other deck the foreground one and advance the queue pointers + UI.
+function swapDecks(nextIdx) {
+  active ^= 1;
+  audio = decks[active].el;
+  S.queueIdx = nextIdx;
+  const t = S.queue[nextIdx];
+  S.playingId = t ? t.id : null;
+  audioRetry = 0;
+  S._xfadeArmedIdx = -1;
+  updateAllUI();
+  updateMediaSession();
+}
+
+// Collapse an in-flight blend to the incoming track (manual skip / pause mid-crossfade).
+function abortCrossfade() {
+  if (!S._xfading) return;
+  const inDeck = decks[active];          // already foreground after swapDecks
+  const outDeck = decks[active ^ 1];
+  const now = audioCtx ? audioCtx.currentTime : 0;
+  if (inDeck.gain) { try { inDeck.gain.gain.cancelScheduledValues(now); inDeck.gain.gain.setValueAtTime(1, now); } catch {} }
+  if (outDeck.gain) { try { outDeck.gain.gain.cancelScheduledValues(now); outDeck.gain.gain.setValueAtTime(0.0001, now); } catch {} }
+  outDeck.endedGuard = true;
+  try { outDeck.el.pause(); } catch {}
+  S._xfading = false;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -833,11 +1003,13 @@ async function loadAndPlay(idx, autoplay) {
   const t = S.queue[idx];
   if (!t) return;
   S.queueIdx = idx; S.playingId = t.id;
+  decks[active].idx = idx; decks[active].endedGuard = false;
+  S._xfadeArmedIdx = -1;       // re-arm crossfade for the new track
   audioRetry = 0;
   const url = await getTrackUrl(t);
   if (!url) { toast('Cannot load track'); return; }
   audio.src = url;
-  audio.volume = S.volume;
+  if (!audioCtx) audio.volume = S.volume;  // direct path; with a graph, masterGain carries volume
   audio.load();
   if (autoplay) { try { await audio.play(); S.isPlaying = true; } catch (e) { S.isPlaying = false; } }
   updateAllUI();
@@ -846,14 +1018,27 @@ async function loadAndPlay(idx, autoplay) {
 
 async function startQueue(trackObjs, { loop = false, timerMinutes = null } = {}) {
   if (!trackObjs.length) return;
-  ensureFreshAudio(); // restore a pristine (hi-res, untainted) element if a prior fade used Web Audio
-  // Build the fade graph now, inside the "Start" gesture, so the end-of-session GainNode
-  // ramp actually works on iOS (a context created later in the timer tick stays suspended).
-  if (timerMinutes && S.timerPrefs.fadeOut) setupFadeGraph();
+  ensureFreshAudio(); // restore a pristine (hi-res, untainted) element if a prior session tainted it
   S.queue = (S.timerPrefs.shuffle && timerMinutes && trackObjs.length > 1) ? shuffle(trackObjs) : trackObjs.slice();
   S.loopMode = loop;
-  audio.volume = S.volume;
-  await loadAndPlay(0, true);
+  S._xfading = false; S._xfadeArmedIdx = -1;
+  // Crossfade engages only when opted in AND the session has somewhere to blend to
+  // (more than one track, or it loops). A lone non-looping track stays on the hi-res path.
+  S.xfadeActive = !!(S.timerPrefs.crossfade && (S.queue.length > 1 || loop));
+  if (S.xfadeActive) {
+    // Dual-deck Web Audio session — built inside this Start gesture (iOS needs that).
+    // masterGain handles both volume and (if timed) the sleep fade.
+    buildGraph({ single: false });
+    S.queueIdx = 0; S.playingId = S.queue[0].id;
+    const ok = await deckLoad(decks[active], 0, { autoplay: true });
+    if (ok) S.isPlaying = true;
+    updateAllUI(); updateMediaSession();
+  } else {
+    // Build the single-deck fade graph now (Start gesture) so the iOS end-of-session ramp works.
+    if (timerMinutes && S.timerPrefs.fadeOut) setupFadeGraph();
+    if (!audioCtx) audio.volume = S.volume;
+    await loadAndPlay(0, true);
+  }
   if (timerMinutes) startTimer(timerMinutes); else clearTimer();
   showMini();
   if (S.expanded) renderNowPlaying();
@@ -867,17 +1052,16 @@ function playSingle(t) {
 }
 
 function handleEnded() {
-  let next = S.queueIdx + 1;
-  if (next >= S.queue.length) {
-    if (!S.loopMode) { stopPlayback(); return; }
-    if (S.timerPrefs.shuffle && S.queue.length > 1) S.queue = shuffle(S.queue);
-    next = 0;
-  }
-  loadAndPlay(next, true);
+  // In a crossfade session the blend normally advances before 'ended' fires; if a track
+  // slips through (too short to blend, or unknown duration) this hard-advances as fallback.
+  const n = computeNextIndex();
+  if (n == null) { stopPlayback(); return; }
+  loadAndPlay(n, true);
 }
 
 function togglePlay() {
   if (!S.queue.length) return;
+  if (S._xfading) abortCrossfade(); // collapse to the incoming track before pause/resume
   if (audio.paused) { audio.play().then(() => { S.isPlaying = true; updateAllUI(); }).catch(() => {}); }
   else { audio.pause(); S.isPlaying = false; updateAllUI(); savePersist(); }
 }
@@ -886,15 +1070,16 @@ function togglePlay() {
 // hide the mini-bar, and drop the queue so the "playing" tile highlight clears.
 // keepSilent is forwarded to clearTimer (timer-end keeps the faded gain at 0).
 function stopPlayback() {
-  // Ending the session: drop the Web Audio gain to silence BEFORE pausing so the buffered
+  // Ending the session: drop the master gain to silence BEFORE pausing so the buffered
   // tail can't blip through at full volume. clearTimer(true) keeps it silent (no restore);
-  // the next play resets volume via loadAndPlay / setupFadeGraph.
-  if (gainNode && audioCtx) {
-    try { const now = audioCtx.currentTime; gainNode.gain.cancelScheduledValues(now); gainNode.gain.setValueAtTime(0.0001, now); } catch {}
+  // the next play resets volume via loadAndPlay / buildGraph.
+  if (masterGain && audioCtx) {
+    try { const now = audioCtx.currentTime; masterGain.gain.cancelScheduledValues(now); masterGain.gain.setValueAtTime(0.0001, now); } catch {}
   }
-  try { audio.pause(); } catch {}
+  for (const d of decks) { try { d.el && d.el.pause(); } catch {} d.endedGuard = true; }
   S.isPlaying = false;
   S._fadeStarted = false;
+  S._xfading = false; S._xfadeArmedIdx = -1; S.xfadeActive = false;
   clearTimer(true);
   S.queue = []; S.queueIdx = 0; S.playingId = null;
   if (S.expanded) collapseNow();
@@ -906,13 +1091,16 @@ function stopPlayback() {
   savePersist();
 }
 
+// Manual skips are an instant cut (no blend), per design — abort any in-flight crossfade first.
 function nextTrack() {
   if (!S.queue.length) return;
+  if (S._xfading) abortCrossfade();
   let n = S.queueIdx + 1; if (n >= S.queue.length) n = 0;
   loadAndPlay(n, true);
 }
 function prevTrack() {
   if (!S.queue.length) return;
+  if (S._xfading) abortCrossfade();
   if (audio.currentTime > 3) { audio.currentTime = 0; return; }
   let p = S.queueIdx - 1; if (p < 0) p = S.queue.length - 1;
   loadAndPlay(p, true);
@@ -946,43 +1134,26 @@ function tickTimer() {
   if (S.timer.fadeWindowMs && rem <= S.timer.fadeWindowMs && rem > 0 && !S._fadeStarted) startFade(rem);
   if (rem <= 0) finishTimer();
 }
-// Build the Web Audio graph and resume the context. MUST be called from a user gesture
-// (the "Start" tap) — a context created later, inside the timer tick, stays suspended on
-// iOS so the gain ramp silently no-ops and the sound just cuts out at the end. Routing
-// through Web Audio taints the element for hi-res, which is acceptable for a timed sleep
-// session; ensureFreshAudio() restores a pristine element for the next untimed session.
-function setupFadeGraph() {
-  try {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return false;
-    if (!audioCtx) {
-      audioCtx = new Ctx();
-      srcNode = audioCtx.createMediaElementSource(audio);
-      gainNode = audioCtx.createGain();
-      srcNode.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
-      waTainted = true;
-    }
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    gainNode.gain.setValueAtTime(S.volume, audioCtx.currentTime);
-    return true;
-  } catch (e) { console.warn('setupFadeGraph', e.message); return false; }
-}
-// Begin the fade-out by ramping the GainNode that setupFadeGraph() built at session start
-// (works on iOS, where audio.volume is ignored). If no graph exists (graph build failed,
-// or fade-out was toggled on for an already-running untimed session), fall back to a
-// stepped audio.volume fade — effective on desktop, silent no-op on iOS.
+// Build the single-deck fade graph (sleep timer without crossfade). MUST be called from a
+// user gesture (the "Start" tap) — a context created later in the timer tick stays
+// suspended on iOS so the ramp silently no-ops. Delegates to buildGraph (idempotent, so
+// it's harmless if a dual-deck crossfade graph is already up).
+function setupFadeGraph() { return buildGraph({ single: true }); }
+// Begin the fade-out by ramping masterGain (built at session start) — works on iOS, where
+// audio.volume is ignored. If no graph exists (build failed, or fade-out was toggled on for
+// an already-running untimed session), fall back to a stepped audio.volume fade — effective
+// on desktop, silent no-op on iOS.
 function startFade(remMs) {
   S._fadeStarted = true;
   const secs = Math.max(0.05, remMs / 1000);
-  if (gainNode && audioCtx) {
+  if (masterGain && audioCtx) {
     try {
       if (audioCtx.state === 'suspended') audioCtx.resume();
       const now = audioCtx.currentTime;
       const startVol = Math.max(0.0001, S.volume);
-      gainNode.gain.cancelScheduledValues(now);
-      gainNode.gain.setValueAtTime(startVol, now);
-      gainNode.gain.linearRampToValueAtTime(0.0001, now + secs);
+      masterGain.gain.cancelScheduledValues(now);
+      masterGain.gain.setValueAtTime(startVol, now);
+      masterGain.gain.linearRampToValueAtTime(0.0001, now + secs);
       return;
     } catch (e) { console.warn('gain fade failed, using volume fade', e.message); }
   }
@@ -999,17 +1170,16 @@ function startFade(remMs) {
 function cancelFade(keepSilent) {
   S._fadeStarted = false;
   if (S.fadeId) { clearInterval(S.fadeId); S.fadeId = null; }
-  if (gainNode && audioCtx) {
+  if (masterGain && audioCtx) {
     try {
       const now = audioCtx.currentTime;
-      gainNode.gain.cancelScheduledValues(now);
-      gainNode.gain.setValueAtTime(keepSilent ? 0.0001 : S.volume, now);
+      masterGain.gain.cancelScheduledValues(now);
+      masterGain.gain.setValueAtTime(keepSilent ? 0.0001 : S.volume, now);
     } catch {}
   }
-  // Only restore element volume when continuing (e.g. extending the timer). During a
-  // stop/teardown (keepSilent) leave it low — loadAndPlay resets it on the next play —
-  // so the buffered tail can't surge back to full volume as playback is torn down.
-  if (!keepSilent) audio.volume = S.volume;
+  // Only restore element volume when continuing (e.g. extending the timer) on the direct
+  // path. During a stop/teardown (keepSilent), or when a graph carries the volume, leave it.
+  if (!keepSilent && !audioCtx) audio.volume = S.volume;
 }
 function finishTimer() {
   stopPlayback(); // teardown always keeps the gain silent — no end-of-fade blip
@@ -1096,6 +1266,7 @@ function syncToggles() {
   $('tg-fade').classList.toggle('on', S.timerPrefs.fadeOut);
   $('tg-shuffle').classList.toggle('on', S.timerPrefs.shuffle);
   $('tg-loop').classList.toggle('on', S.timerPrefs.loop);
+  $('tg-xfade').classList.toggle('on', S.timerPrefs.crossfade);
 }
 function updateSheetCta() { $('sheet-cta').textContent = `Start ${S.timerPrefs.minutes}-min mix`; }
 function openSheet() {
@@ -1842,18 +2013,25 @@ function bindEvents() {
     $('scrub-fill').style.width = (p * 100) + '%';
     $('scrub-thumb').style.left = (p * 100) + '%';
     $('time-cur').textContent = formatTime(p * dur);
-  }, { onStart: () => { S.scrubDragging = true; }, onEnd: (p) => { S.scrubDragging = false; if (audio.duration) audio.currentTime = p * audio.duration; } });
+  }, { onStart: () => { S.scrubDragging = true; }, onEnd: (p) => {
+    S.scrubDragging = false;
+    const dur = audio.duration;
+    if (dur) {
+      audio.currentTime = p * dur;
+      // Seeking into the crossfade tail shouldn't fire a blend — treat this track as handled.
+      if (dur - p * dur <= effectiveXfadeFor(dur)) S._xfadeArmedIdx = decks[active].idx;
+    }
+  } });
 
   // Volume drag.
-  // Desktop: audio.volume controls output directly (hi-res path).
-  // iOS: audio.volume is ignored during normal hi-res playback — the slider moves but
-  // can't change output (use the phone's volume buttons); it only takes effect once the
-  // Web Audio graph is live (during/after a fade). We drive both so it works everywhere it can.
+  // Direct path (no graph): audio.volume controls output (desktop hi-res; iOS ignores it,
+  // so use the phone's volume buttons). With a Web Audio graph up (fade or crossfade),
+  // masterGain carries the level and works on iOS too. Drive exactly one to avoid squaring.
   bindSlider($('vol-track'), (p) => {
     S.volume = p; S.savedVolume = p;
     if (!S._fadeStarted) {
-      audio.volume = p;
-      if (gainNode && audioCtx) { try { gainNode.gain.setValueAtTime(p, audioCtx.currentTime); } catch {} }
+      if (audioCtx && masterGain) { try { masterGain.gain.setValueAtTime(p, audioCtx.currentTime); } catch {} }
+      else audio.volume = p;
     }
     updateVolUI();
   }, { onEnd: () => savePersist() });
