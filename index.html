@@ -1022,20 +1022,22 @@ async function startQueue(trackObjs, { loop = false, timerMinutes = null } = {})
   S.queue = (S.timerPrefs.shuffle && timerMinutes && trackObjs.length > 1) ? shuffle(trackObjs) : trackObjs.slice();
   S.loopMode = loop;
   S._xfading = false; S._xfadeArmedIdx = -1;
-  // Crossfade engages only when opted in AND the session has somewhere to blend to
-  // (more than one track, or it loops). A lone non-looping track stays on the hi-res path.
-  S.xfadeActive = !!(S.timerPrefs.crossfade && (S.queue.length > 1 || loop));
+  // Crossfade engages only for UNTIMED, multi-track listening. Timed (sleep) sessions stay
+  // on the plain direct path so they keep playing when the screen locks — iOS suspends Web
+  // Audio on lock, which would otherwise silence a crossfading/faded sleep session.
+  S.xfadeActive = !!(S.timerPrefs.crossfade && !timerMinutes && S.queue.length > 1);
   if (S.xfadeActive) {
     // Dual-deck Web Audio session — built inside this Start gesture (iOS needs that).
-    // masterGain handles both volume and (if timed) the sleep fade.
     buildGraph({ single: false });
     S.queueIdx = 0; S.playingId = S.queue[0].id;
     const ok = await deckLoad(decks[active], 0, { autoplay: true });
     if (ok) S.isPlaying = true;
     updateAllUI(); updateMediaSession();
   } else {
-    // Build the single-deck fade graph now (Start gesture) so the iOS end-of-session ramp works.
-    if (timerMinutes && S.timerPrefs.fadeOut) setupFadeGraph();
+    // Direct playback (no Web Audio) — survives a locked screen. A timed session's fade-out
+    // therefore uses the stepped audio.volume fallback: a smooth fade on desktop, and on iOS
+    // simply a clean stop at the timer (audio.volume is ignored there, but playback keeps
+    // going while locked, which is what matters for sleep).
     if (!audioCtx) audio.volume = S.volume;
     await loadAndPlay(0, true);
   }
@@ -1288,8 +1290,10 @@ function startTimerFromSheet() {
     S.mix = ids;
     startQueue(tracks, { loop: S.timerPrefs.loop, timerMinutes: mins });
   } else if (S.queue.length) {
+    // Adding a timer to whatever's playing → no Web Audio (lock-survivable); stop crossfading.
+    // The fade-out uses the stepped audio.volume fallback (desktop fades; iOS clean-stops).
     S.loopMode = S.timerPrefs.loop;
-    if (S.timerPrefs.fadeOut) setupFadeGraph(); // within the Start gesture (iOS needs this)
+    S.xfadeActive = false;
     startTimer(mins);
     if (audio.paused) togglePlay();
     updateAllUI();
@@ -2061,8 +2065,12 @@ function bindEvents() {
   window.addEventListener('online', () => { S.connectivity = 'online'; toast('Back online'); renderGrid(); });
   window.addEventListener('offline', () => { S.connectivity = 'offline'; toast('Offline — cached sounds still play'); renderGrid(); });
 
-  // Persist on hide
-  document.addEventListener('visibilitychange', () => { if (document.hidden) savePersist(); });
+  // Persist on hide; resume the Web Audio context on return to foreground (iOS suspends it
+  // while backgrounded/locked — this makes an untimed crossfade session recover promptly).
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { savePersist(); return; }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  });
   window.addEventListener('pagehide', savePersist);
 }
 

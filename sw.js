@@ -2,7 +2,7 @@
    Strategy: network-first for the HTML so deployed updates propagate when online,
    with a cached fallback so the installed app still launches with no connection.
    Credentials and track state live in localStorage/OPFS, independent of this cache. */
-const CACHE = "snoozz-shell-v13";
+const CACHE = "snoozz-shell-v14";
 const SHELL = ["./"];
 
 self.addEventListener("install", (e) => {
