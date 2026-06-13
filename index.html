@@ -319,6 +319,7 @@ body.ios .np-vol { display: none; }
       <div class="topbar-brand"><span class="moon"></span><span class="wordmark">Snoozz</span></div>
       <div class="topbar-actions">
         <div class="icon-btn" role="button" tabindex="0" id="refresh-art-btn" data-action="refresh-art" title="Refresh cover art">&#8635;</div>
+        <div class="icon-btn" role="button" tabindex="0" data-action="random-mix" title="Add 5 random sounds">&#127922;</div>
         <div class="icon-btn" role="button" tabindex="0" data-action="open-timer" title="Sleep timer">&#9201;</div>
       </div>
     </div>
@@ -1232,6 +1233,30 @@ function toggleSelect(id) {
 }
 function clearMix() { S.mix = []; renderGrid(); updateTray(); }
 
+// Toolbar "random" button: drop into select mode (if needed) and add up to N
+// random playable tracks not already in the mix. Pressing it again tops up by N more.
+function addRandomToMix(n = 5) {
+  if (!S.tracks || !S.tracks.length) { toast('No sounds available'); return; }
+  if (!S.selectMode) {
+    S.selectMode = true;
+    S.mix = [];
+    $('topbar-normal').style.display = 'none';
+    $('topbar-select').classList.add('active');
+  }
+  const pool = S.tracks.filter(t => isPlayable(t) && !S.mix.includes(t.id));
+  if (!pool.length) { toast('All available sounds are already in the mix'); return; }
+  // Fisher–Yates shuffle, then take the first n.
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const pick = pool.slice(0, n);
+  for (const t of pick) S.mix.push(t.id);
+  if (navigator.vibrate) navigator.vibrate(8);
+  renderGrid(); updateTray();
+  toast(`Added ${pick.length} random sound${pick.length !== 1 ? 's' : ''}`);
+}
+
 function updateTray() {
   const tray = $('mix-tray');
   if (S.selectMode && S.mix.length) {
@@ -1954,6 +1979,7 @@ const actions = {
   'start-timer': startTimerFromSheet,
   'cancel-select': exitSelectMode,
   'clear-mix': clearMix,
+  'random-mix': () => addRandomToMix(5),
   'play-mix': playMix,
   'expand': expandNow,
   'collapse': collapseNow,
