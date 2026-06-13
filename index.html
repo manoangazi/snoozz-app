@@ -231,6 +231,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 .np-meta { text-align: center; }
 .np-title { font-size: 27px; font-weight: 600; }
 .np-source { font: 12px var(--mono); color: var(--ink-dim); margin-top: 5px; }
+.np-remaining { text-align: center; font: 12px var(--mono); color: var(--ink-dim); margin-top: 10px; min-height: 14px; }
 .np-artist { font-size: 13px; color: var(--ink); }
 .np-scrub { display: flex; flex-direction: column; gap: 6px; }
 .scrub-track { height: 4px; border-radius: 2px; background: var(--ink-faint); position: relative; cursor: pointer; }
@@ -390,6 +391,7 @@ body.ios .np-vol { display: none; }
         </div>
         <div class="scrub-times"><span id="time-cur">0:00</span><span id="time-tot">0:00</span></div>
       </div>
+      <div class="np-remaining" id="np-remaining"></div>
       <div class="np-transport">
         <button class="small" data-action="extend" title="+5 min">&#10557;</button>
         <button data-action="prev">&#9198;</button>
@@ -1807,6 +1809,24 @@ function updateScrubber() {
   $('scrub-thumb').style.left = pct + '%';
   $('time-cur').textContent = formatTime(cur);
   $('time-tot').textContent = formatTime(dur);
+  updateSessionRemaining();
+}
+
+// Total remaining playback across the queue from the current position: time left
+// in the current track plus the full duration of every track still ahead. Only
+// shown for mixes (≥2 tracks). '≈' when some upcoming durations aren't known yet.
+function updateSessionRemaining() {
+  const el = $('np-remaining');
+  if (!el) return;
+  if (S.queue.length < 2) { el.textContent = ''; return; }
+  const dur = audio.duration || 0, cur = audio.currentTime || 0;
+  let rem = Math.max(0, dur - cur), unknown = dur ? 0 : 1;
+  for (let i = S.queueIdx + 1; i < S.queue.length; i++) {
+    const t = S.queue[i];
+    if (t && t.duration) rem += t.duration; else unknown++;
+  }
+  const prefix = unknown ? '≈ ' : '';
+  el.textContent = `${prefix}${formatTotal(rem)} of playback left`;
 }
 function updateVolUI() {
   const pct = Math.round(S.volume * 100);
