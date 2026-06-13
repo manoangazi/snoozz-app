@@ -130,14 +130,10 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 #topbar-select.active { display: flex; }
 #topbar-select .center { font-size: 17px; font-weight: 600; }
 #topbar-select .side { font: 15px var(--font); color: var(--ink-dim); padding: 8px; min-width: 56px; }
-#topbar-select .side.right { text-align: right; color: var(--accent); display: flex; align-items: center; gap: 12px; position: relative; }
+#topbar-select .side.right { text-align: right; color: var(--accent); display: flex; align-items: center; gap: 14px; }
 #topbar-select .side.left { text-align: left; }
-.random-trigger { color: var(--accent); cursor: pointer; font-size: 14px; font-weight: 500; padding: 4px 8px; }
-.random-menu { position: absolute; top: 100%; right: 0; background: var(--bg-raised); border: 1.5px solid var(--ink-faint); border-radius: 8px; z-index: 10; min-width: 110px; margin-top: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-.random-item { padding: 10px 14px; font-size: 13px; color: var(--ink); cursor: pointer; border-bottom: 1px solid var(--ink-faint); }
-.random-item:last-child { border-bottom: none; }
-.random-item:hover { background: var(--bg); }
-.clear-btn { color: var(--accent); cursor: pointer; font-size: 14px; font-weight: 500; padding: 4px 8px; }
+.random-add { color: var(--accent); cursor: pointer; font-size: 15px; font-weight: 500; padding: 4px 0; white-space: nowrap; }
+.clear-btn { color: var(--accent); cursor: pointer; font-size: 15px; font-weight: 500; padding: 4px 0; }
 
 #grid-scroll { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px 8px; min-height: 0; }
 #grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px; }
@@ -332,12 +328,7 @@ body.ios .np-vol { display: none; }
       <div class="side left" role="button" tabindex="0" data-action="cancel-select">Cancel</div>
       <span class="center">Select tracks</span>
       <div class="side right">
-        <div class="random-trigger" role="button" tabindex="0" id="random-trigger">Random ▼</div>
-        <div class="random-menu" id="random-menu" style="display: none;">
-          <div class="random-item" role="button" tabindex="0" data-action="add-random" data-count="5">5 sounds</div>
-          <div class="random-item" role="button" tabindex="0" data-action="add-random" data-count="10">10 sounds</div>
-          <div class="random-item" role="button" tabindex="0" data-action="add-random" data-count="15">15 sounds</div>
-        </div>
+        <div class="random-add" role="button" tabindex="0" data-action="random-mix">+5 random</div>
         <div class="clear-btn" role="button" tabindex="0" data-action="clear-mix">Clear</div>
       </div>
     </div>
@@ -1246,9 +1237,9 @@ function toggleSelect(id) {
 }
 function clearMix() { S.mix = []; renderGrid(); updateTray(); }
 
-// Toolbar random dropdown: add up to N random playable tracks not already in the mix.
+// Selection toolbar "+5 random": add up to N random playable tracks not already in
+// the mix. Pressing it again tops up by N more.
 function addRandomToMix(n = 5) {
-  closeRandomMenu();
   if (!S.tracks || !S.tracks.length) { toast('No sounds available'); return; }
   if (!S.selectMode) {
     S.selectMode = true;
@@ -1268,16 +1259,6 @@ function addRandomToMix(n = 5) {
   if (navigator.vibrate) navigator.vibrate(8);
   renderGrid(); updateTray();
   toast(`Added ${pick.length} random sound${pick.length !== 1 ? 's' : ''}`);
-}
-
-function toggleRandomMenu() {
-  const menu = $('random-menu');
-  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
-}
-
-function closeRandomMenu() {
-  const menu = $('random-menu');
-  menu.style.display = 'none';
 }
 
 function updateTray() {
@@ -2002,6 +1983,7 @@ const actions = {
   'start-timer': startTimerFromSheet,
   'cancel-select': exitSelectMode,
   'clear-mix': clearMix,
+  'random-mix': () => addRandomToMix(5),
   'play-mix': playMix,
   'expand': expandNow,
   'collapse': collapseNow,
@@ -2014,21 +1996,12 @@ const actions = {
 };
 
 function bindEvents() {
-  // Random menu trigger
-  $('random-trigger').addEventListener('click', toggleRandomMenu);
-
   document.body.addEventListener('click', (e) => {
     const el = e.target.closest('[data-action]');
     if (!el) return;
     const act = el.dataset.action;
     // mini-bar: play button shouldn't also expand
     if (act === 'toggle-play' && el.dataset.stop) { e.stopPropagation(); }
-    // Random menu items: parse data-count and call addRandomToMix
-    if (act === 'add-random') {
-      const count = parseInt(el.dataset.count, 10) || 5;
-      addRandomToMix(count);
-      return;
-    }
     if (actions[act]) { actions[act](); }
   });
 
